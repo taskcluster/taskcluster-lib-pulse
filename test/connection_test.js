@@ -30,6 +30,16 @@ suite('buildConnectionString', function() {
       }),
       'amqps://me:letmein@pulse.abc.com:5671');
   });
+
+  test('builds a connection string with urlencoded values', function() {
+    assert.equal(
+      lib.buildConnectionString({
+        username: 'ali-escaper:/@\\|()<>&',
+        password: 'bobby-tables:/@\\|()<>&',
+        hostname: 'pulse.abc.com',
+      }),
+      'amqps://ali-escaper:/@%5C%7C()%3C%3E&:bobby-tables:/@%5C%7C()%3C%3E&@pulse.abc.com:5671');
+  });
 });
 
 const connectionTests = connectionString => {

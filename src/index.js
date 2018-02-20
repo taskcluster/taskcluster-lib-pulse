@@ -21,9 +21,9 @@ const buildConnectionString = function({username, password, hostname}) {
   // Construct connection string
   return [
     'amqps://',         // Ensure that we're using SSL
-    username,
+    encodeURI(username),
     ':',
-    password,
+    encodeURI(password),
     '@',
     hostname,
     ':',
