@@ -86,6 +86,20 @@ const connectionTests = connectionString => {
     assume(gotConnection).to.equal(false);
   });
 
+  test('reconnect interval', async function() {
+    let client = new lib.Client({
+      connectionString,
+      recycleInterval: 10,
+    });
+
+    let recycles = 0;
+    client.recycle = () => { recycles++; };
+    client.start();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await client.stop();
+    assume(recycles).is.gt(5);
+  });
+
   test('start and stop after connection is established', async function() {
     await new Promise((resolve, reject) => {
       client.on('connected', () => {

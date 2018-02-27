@@ -53,11 +53,11 @@ exports.buildConnectionString = buildConnectionString;
  * * username
  * * password
  * * hostname
- * * reconnectInterval (ms; default 1h)
+ * * recycleInterval (ms; default 1h)
  * * retirementDelay (ms; default 30s)
  */
 class Client extends events.EventEmitter {
-  constructor({username, password, hostname, connectionString, reconnectInterval, retirementDelay}) {
+  constructor({username, password, hostname, connectionString, recycleInterval, retirementDelay}) {
     super();
 
     if (connectionString) {
@@ -69,7 +69,7 @@ class Client extends events.EventEmitter {
       connectionString = buildConnectionString({username, password, hostname});
     }
 
-    this.reconnectInterval = reconnectInterval || 3600 * 1000; // XXX TODO
+    this.recycleInterval = recycleInterval || 3600 * 1000;
     this.retirementDelay = retirementDelay || 30 * 1000;
     this.running = false;
     this.connections = [];
@@ -87,12 +87,20 @@ class Client extends events.EventEmitter {
     this.debug('starting');
     this.running = true;
     this.recycle();
+
+    this._interval = setInterval(
+      () => this.recycle(),
+      this.recycleInterval);
   }
 
   async stop() {
     assert(this.running, 'Not running');
     this.debug('stopping');
     this.running = false;
+
+    clearInterval(this._interval);
+    this._interval = null;
+
     this.recycle();
 
     // wait until all existing connections are finished

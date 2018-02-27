@@ -27,7 +27,7 @@ server. Once started, it will do so automatically until stopped.
 
 Other options to the constructor:
 
- * `reconnectInterval` - interval on which connections are automatically recycled, in ms.  Default: 1 hour.
+ * `recycleInterval` - interval on which connections are automatically recycled, in ms.  Default: 1 hour.
  * `retirementDelay` - time that a connection remains in the `retiring` state.
 
 ## Connection Setup
