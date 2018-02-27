@@ -43,7 +43,7 @@ suite('buildConnectionString', function() {
 });
 
 const connectionTests = connectionString => {
-  let connector;
+  let client;
 
   // use a unique name for each test run, just to ensure nothing interferes
   const unique = new Date().getTime().toString();
@@ -54,7 +54,7 @@ const connectionTests = connectionString => {
   const debug = debugModule('test');
 
   setup(function() {
-    connector = new lib.Connector({
+    client = new lib.Client({
       connectionString,
       retirementDelay: 50,
     });
@@ -80,30 +80,30 @@ const connectionTests = connectionString => {
 
   test('start and immediately stop', async function() {
     let gotConnection = false;
-    connector.on('connected', () => { gotConnection = true; });
-    connector.start();
-    await connector.stop();
+    client.on('connected', () => { gotConnection = true; });
+    client.start();
+    await client.stop();
     assume(gotConnection).to.equal(false);
   });
 
   test('start and stop after connection is established', async function() {
     await new Promise((resolve, reject) => {
-      connector.on('connected', () => {
-        connector.stop().then(resolve, reject);
+      client.on('connected', () => {
+        client.stop().then(resolve, reject);
       });
-      connector.start();
+      client.start();
     });
   });
 
   test('start, fail, and then stop', async function() {
     await new Promise((resolve, reject) => {
-      connector.once('connected', connection => {
+      client.once('connected', connection => {
         connection.failed();
-        connector.once('connected', () => {
-          connector.stop().then(resolve, reject);
+        client.once('connected', () => {
+          client.stop().then(resolve, reject);
         });
       });
-      connector.start();
+      client.start();
     });
   });
 
@@ -113,7 +113,7 @@ const connectionTests = connectionString => {
 
     try {
       await new Promise((resolve, reject) => {
-        connector.on('connected', async (conn) => {
+        client.on('connected', async (conn) => {
           let chan, consumer;
 
           // do the per-connection setup we expect a user to do
@@ -153,24 +153,24 @@ const connectionTests = connectionString => {
 
         // start publishing the message
         publishMessage().catch(reject);
-        connector.start();
+        client.start();
       });
 
       assume(messageReceived).to.equal(1);
     } finally {
-      await connector.stop();
+      await client.stop();
     }
   });
 };
 
-suite('Connector', function() {
+suite('Client', function() {
   suite('constructor', function() {
     test('rejects connectionString *and* username', function() {
-      assume(() => new lib.Connector({username: 'me', connectionString: 'amqps://..'}))
+      assume(() => new lib.Client({username: 'me', connectionString: 'amqps://..'}))
         .throws(/along with/);
     });
     test('requires either connectionString *or* username', function() {
-      assume(() => new lib.Connector({}))
+      assume(() => new lib.Client({}))
         .throws(/is required/);
     });
   });

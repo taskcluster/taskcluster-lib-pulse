@@ -6,23 +6,23 @@ Library for interacting with Pulse and Taskcluster-Pulse
 
 ## Constructor
 
-Create a `Connector` to handle (re)connecting to Pulse:
+Create a `Client` to handle (re)connecting to Pulse:
 
 ```javascript
 const pulse = require('taskcluster-lib-pulse');
 
-const connector = new pulse.Connector({
+const client = new pulse.Client({
   connectionString: 'amqps://...',
 });
 // or
-const connector = new pulse.Connector({
+const client = new pulse.Client({
   username: 'sendr',
   password: 'sekrit',
   hostname: 'pulse.mycompany.com',
 });
 ```
 
-The `Connector` is responsible for connecting, and re-connecting, to the pulse
+The `Client` is responsible for connecting, and re-connecting, to the pulse
 server. Once started, it will do so automatically until stopped.
 
 Other options to the constructor:
@@ -34,10 +34,10 @@ Other options to the constructor:
 
 AMQP is a very connection-oriented protocol, so as a user of this library, you
 will need to set up each new connection.  To do so, set up an event listener
-for the `connected` event from the connector:
+for the `connected` event from the client:
 
 ```javascript
-connector.on('connected', conn => {
+client.on('connected', conn => {
   // ...
 });
 ```
@@ -59,12 +59,12 @@ begin cretaing a new connection (culminating in another `connected` event).
 
 ## Reconnection
 
-The `Connector` instance will automatically reconnect periodically. This helps
+The `Client` instance will automatically reconnect periodically. This helps
 to distribute load across a cluster of servers, and also exerciess the
 reconnection logic in the application, avoiding nasty surprises when a network
 or server failure occurs.
 
-The `Connector` also has a `recycle` method that will trigger a retirement and
+The `Client` also has a `recycle` method that will trigger a retirement and
 reconnection.
 
 ## Retirement
@@ -77,11 +77,11 @@ AMQP connection.
 The `Connection` instance emits a `retiring` event when retirement begins.
 Consumers should respond to this message by cancelling any channel consumers.
 The `retiring` event from the `Connection` will be followed by a
-`connected` event from the `Connector` for the next connection.
+`connected` event from the `Client` for the next connection.
 
 ## Shutdown
 
-Call the async `Connector.stop` method to shut the whole thing down. This will
+Call the async `Client.stop` method to shut the whole thing down. This will
 wait until all existing `Connection` instances are finished their retirement.
 
 # Examples
@@ -98,7 +98,7 @@ setup are treated as a connection failure.
 
 
 ```javascript
-connector.on('connected', async (conn) => {
+client.on('connected', async (conn) => {
   let channel, consumer;
 
   try {
@@ -123,7 +123,7 @@ connector.on('connected', async (conn) => {
   }
 });
 
-connector.start();
+client.start();
 ```
 
 # Testing

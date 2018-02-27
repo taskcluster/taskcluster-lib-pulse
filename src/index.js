@@ -3,7 +3,7 @@ const debug = require('debug');
 const amqplib = require('amqplib');
 const assert = require('assert');
 
-var connectorCounter = 0;
+var clientCounter = 0;
 
 /**
  * Build Pulse ConnectionString, from options on the form:
@@ -56,7 +56,7 @@ exports.buildConnectionString = buildConnectionString;
  * * reconnectInterval (ms; default 1h)
  * * retirementDelay (ms; default 30s)
  */
-class Connector extends events.EventEmitter {
+class Client extends events.EventEmitter {
   constructor({username, password, hostname, connectionString, reconnectInterval, retirementDelay}) {
     super();
 
@@ -75,8 +75,8 @@ class Connector extends events.EventEmitter {
     this.connections = [];
     this.connectionCounter = 0;
 
-    this.id = ++connectorCounter;
-    this.debug = debug(`taskcluster-lib-pulse:connector:${this.id}`);
+    this.id = ++clientCounter;
+    this.debug = debug(`taskcluster-lib-pulse:client:${this.id}`);
   }
 
   /**
@@ -127,11 +127,11 @@ class Connector extends events.EventEmitter {
   }
 }
 
-exports.Connector = Connector;
+exports.Client = Client;
 
 /**
  * A single connection to a pulse server.  This is a thin wrapper around a raw
- * AMQP connection, instrumented to inform the parent Connector of failures
+ * AMQP connection, instrumented to inform the parent Client of failures
  * and trigger a reconnection.  It is possible to have multiple Connection
  * objects in the same process at the same time, while one is being "retired" but
  * is lingering around to send ack's for any in-flight message handlers.
@@ -142,7 +142,7 @@ exports.Connector = Connector;
  *
  * The instance will emit a `connected` event when it connects to the pulse server.
  * This event occurs before the connection is provided to a user, so it is only
- * of interest to the Connector class.
+ * of interest to the Client class.
  *
  * This instance will emit a `retiring` event just before it is retired.  Users
  * should cancel consuming from any channels, as a new connection will soon
@@ -164,14 +164,14 @@ exports.Connector = Connector;
  *
  */
 class Connection extends events.EventEmitter {
-  constructor(connector, id) {
+  constructor(client, id) {
     super();
 
-    this.connector = connector;
+    this.client = client;
     this.id = id;
     this.amqp = null;
 
-    this.debug = debug(`taskcluster-lib-pulse:connection:${connector.id}.${id}`);
+    this.debug = debug(`taskcluster-lib-pulse:connection:${client.id}.${id}`);
 
     this.connect();
   }
@@ -180,7 +180,7 @@ class Connection extends events.EventEmitter {
     this.debug('connecting');
     this.state = 'connecting';
 
-    amqplib.connect(this.connector.connectionString, {
+    amqplib.connect(this.client.connectionString, {
       heartbeat: 120,
       noDelay: true,
       timeout: 30 * 1000,
@@ -226,7 +226,7 @@ class Connection extends events.EventEmitter {
       return;
     }
     this.debug('failed');
-    this.connector.recycle();
+    this.client.recycle();
   }
 
   retire() {
@@ -249,7 +249,7 @@ class Connection extends events.EventEmitter {
       this.amqp = null;
       this.state = 'finished';
       this.emit('finished');
-    }, this.connector.retirementDelay);
+    }, this.client.retirementDelay);
   }
 }
 
