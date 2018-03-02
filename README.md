@@ -1,10 +1,23 @@
 # taskcluster-lib-pulse
 
-Library for interacting with Pulse and Taskcluster-Pulse
+Library for interacting with Pulse and Taskcluster-Pulse.  See [the
+docs](https://docs.taskcluster.net/manual/design/apis/pulse) for more
+information on Pulse.
 
 # Usage
 
-## Constructor
+This library defines a Client along with several classes and functions that
+base their functionality on a Client.  The Client represents an association
+with a Pulse service, automatically reconnecting as necessary.
+
+The higher-level components are:
+
+* [PulseQueue](#PulseQueue)
+
+If you are using one of the higher-level components, then the details of
+interacting with a Client are not important -- just construct one and move on.
+
+# Client
 
 Create a `Client` to handle (re)connecting to Pulse:
 
@@ -31,7 +44,7 @@ Other options to the constructor:
  * `retirementDelay` - time that a connection remains in the `retiring` state. Default: 30 seconds.
  * `minReconnectionInterval` - minimum time between connection attempts. Default: 15s.
 
-## Connection Setup
+## Interacting With a Client
 
 AMQP is a very connection-oriented protocol, so as a user of this library, you
 will need to set up each new connection.  To do so, set up an event listener
@@ -134,9 +147,9 @@ The `retiring` event from the `Connection` will be followed by a
 Call the async `Client.stop` method to shut the whole thing down. This will
 wait until all existing `Connection` instances are finished their retirement.
 
-# Examples
+## Examples
 
-## Consumer
+### Consumer
 
 To consume messages, listen for `connected` messages and set up a new
 channel on each new connection.  Stop consuming from the channel on retirement,
@@ -175,6 +188,110 @@ client.on('connected', async (conn) => {
 
 client.start();
 ```
+
+# PulseQueue
+
+A PulseQueue declares a queue and listens for messages on that
+queue, invoking a callback for each messages.
+
+The options to the constructor are:
+
+```javascript
+let pq = new pulse.PulseQueue({
+  client,                // Client object for connecting to the server
+  bindings: [{           // exchange/routingKey patterns to bind to
+    exchange,            // Exchange to bind
+    routingKeyPattern,   // Routing key as string
+    routingKeyReference, // Reference used to parse routing keys (optional)
+  }, ..],
+  handleMessage,         // handler for incoming messages
+  queueName,             // Queue name; if omitted, set exclusiveQueue: true
+  exclusiveQueue,        // If true, use an exclusive queue (and lose messages on reconnect)
+  prefetch,              // Max number of messages unacknowledged to hold (optional)
+  maxLength,             // Maximum queue size, undefined for none
+}
+```
+
+If `queueName` is specified, this will create a durable queue using a
+pulse-compatible queue name based on `queueName` (prefixed with
+`queue/<namespace>`).  If no `queueName` is given, `exclusiveQueue` must be
+true.
+
+If `exclusiveQueue` is true, then the resulting queue will be defined as
+exclusive and auto-delete. *WARNING* such a queue will be deleted when the
+connection fails, and connections fail regularly in production circumstances.
+When using an exclusive queue, PulseQueue will emit an `error` event on each
+reconnection, with `err.code === 'ExclusiveQueueDisconneted'`. You may choose
+to handle this error (understanding that messages may be lost) or let it crash
+the process.
+
+If `routingKeyReference` is provided for the exchange from which messages
+arrive, then the listener will parse the routing key and make it available as a
+dictionary on the message.  Note that bindings are easily constructed using the
+taskcluster-client library.
+
+The instance does not start consuming messages until `pq.start()`. When this
+function's promise has resolved, the queue exists and all bindings are in place.
+At this time, it is safe to initiate any actions that might generate messages
+you wish to receive.
+
+```javascript
+await pq.start();
+```
+
+Similarly, call `pq.stop()` to stop consuming messages.  A PulseQueue cannot be
+restarted after stopping -- instead, create a new instance.
+
+When a message is received, `handleMessage` is called (asynchronously) with
+a message of the form:
+
+```javascript
+{
+  payload,       // parsed payload (as JSON)
+  exchange,      // exchange name
+  routingKey:    // primary routing key
+  redelivered:   // true if this message has already been attempted
+  routes: [..]   // additional routes (from CC header, with the `route.`
+                 // prefix stripped)
+  routing: {}    // parsed routes (if routingKeyReference is provided)
+}
+```
+
+If the handler fails, the message will be re-queued and re-tried once.
+
+Listening starts immediately, or when the client starts.
+
+## Routing Key Reference
+
+A binding's `routingKeyReference` gives reference information for the format of
+a routing key, and allows the tool to "parse" a message's routing key into
+components.  It is an array of objects with properties `name`, the name of the
+component, and `multipleWords` if the component can match multiple words
+(joined with a `.`).  Other fields are ignored.  Only one component can have
+`multipleWords`.  This is compatible with the references produced by
+taskcluster services.
+
+```javascript
+routingKeyReference: [
+  {name: 'routingKeyKind'},
+  {name: 'someId', multipleWords: true},
+]
+```
+
+If this parameter is given, the message will have a `routing` property
+containing the routing key components keyed by their name.
+
+The library assumes that all messages on a given exchange share the same
+routing key reference, as it is not practical to determine which
+routingKeyPattern matched a particular message.
+
+## Modifying Bindings
+
+In some cases, it is necessary to modify the bindings for a queue while it is
+still consuming.  Use `queue.withChannel` (above) for this purpose. In this
+case, it is simplest to provide an empty `bindings: []` to the PulseQueue
+constructor and manage bindings entirely via `withChannel`. Note that with this
+arrangement, routing key reference is not supported.
 
 # Testing
 
