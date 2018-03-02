@@ -151,6 +151,72 @@ class Client extends events.EventEmitter {
       this.connections.unshift(newConn);
     }
   }
+
+  /**
+   * Get a full object name, following the Pulse security model,
+   * `<kind>/<namespace>/<name`.  This is useful for manipulating these objects
+   * directly, for example to modify the bindings of an active queue.
+   */
+  fullObjectName(kind, name) {
+    return `${kind}/${this.namespace}/${name}`;
+  }
+
+  /**
+   * The active connection, if any.  This is useful when starting to use an already-
+   * running client:
+   *   client.on('connected', setupConnection);
+   *   if (client.activeConnection) {
+   *     await setupConnection(client.activeConnection);
+   *   }
+   */
+  get activeConnection() {
+    if (this.running && this.connections.length && this.connections[0].state === 'connected') {
+      return this.connections[0];
+    }
+  }
+
+  /**
+   * Run the given async function with a connection.  This is similar to
+   * client.once('connected', ..), except that it will fire immediately if
+   * the client is already connected.  This does *not* automatically re-run
+   * the function if the connection fails.
+   */
+  withConnection(fn) {
+    if (this.activeConnection) {
+      return fn(this.activeConnection);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.once('connected', conn => Promise.resolve(fn(conn)).then(resolve, reject));
+    });
+  }
+
+  /**
+   * Run the given async function with an amqplib channel or confirmChannel. This wraps
+   * withConnection to handle closing the channel.
+   */
+  withChannel(fn, {confirmChannel} = {}) {
+    return this.withConnection(async conn => {
+      const method = confirmChannel ? 'createConfirmChannel' : 'createChannel';
+      const channel = await conn.amqp[method]();
+
+      // consider any errors on the channel to be potentially fatal to the whole
+      // connection, out of an abundance of caution
+      channel.on('error', () => this.recycle());
+
+      try {
+        return await fn(channel);
+      } finally {
+        try {
+          await channel.close();
+        } catch (err) {
+          // an error trying to close the channel suggests the connection is dead, so
+          // recycle, but continue to throw the first error
+          this.recycle();
+        }
+      }
+    });
+  }
 }
 
 exports.Client = Client;

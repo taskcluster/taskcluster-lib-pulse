@@ -5,6 +5,7 @@ const assert = require('assert');
 const assume = require('assume');
 const debugModule = require('debug');
 const libMonitor = require('taskcluster-lib-monitor');
+const slugid = require('slugid');
 
 const PULSE_CONNECTION_STRING = process.env.PULSE_CONNECTION_STRING;
 
@@ -96,6 +97,23 @@ const connectionTests = connectionString => {
     assume(gotConnection).to.equal(false);
   });
 
+  test('activeConnection', async function() {
+    assume(client.activeConnection).to.equal(undefined);
+    await new Promise((resolve, reject) => {
+      client.on('connected', conn => {
+        try {
+          assume(client.activeConnection).to.equal(conn);
+        } catch (err) {
+          return reject(err);
+        }
+        resolve();
+      });
+      client.start();
+    });
+    await client.stop();
+    assume(client.activeConnection).to.equal(undefined);
+  });
+
   test('reconnect interval', async function() {
     let client = new Client({
       connectionString,
@@ -130,6 +148,57 @@ const connectionTests = connectionString => {
       });
       client.start();
     });
+  });
+
+  test('withConnection', async function() {
+    let gotConnection = false;
+    let finishedWithConnection = false;
+    client.withConnection(conn => { gotConnection = true; })
+      .then(() => { finishedWithConnection = true; });
+
+    assume(finishedWithConnection).to.equal(false);
+    await new Promise((resolve, reject) => {
+      client.once('connected', () => {
+        client.stop().then(resolve, reject);
+      });
+      client.start();
+    });
+
+    // check that the withConnection function was called, and that its
+    // promise is resolved.
+    assume([gotConnection, finishedWithConnection]).to.eqls([true, true]);
+  });
+
+  test('withChannel', async function() {
+    const queueName = `queue/${client.namespace}/${slugid.v4()}`;
+
+    client.start();
+
+    let gotException;
+    try {
+      await client.withChannel(async chan => {
+        await chan.assertQueue(queueName);
+        // throw an error to exercise error-handling code
+        throw new Error('uhoh');
+      });
+    } catch (err) {
+      if (/uhoh/.test(err)) {
+        // note that we can't tell if the channel was closed properly
+        gotException = true;
+      } else {
+        throw err;
+      }
+    }
+    assume(gotException).to.equal(true);
+
+    let queueInfo;
+    await client.withChannel(async chan => {
+      queueInfo = await chan.checkQueue(queueName);
+      await chan.deleteQueue(queueName);
+    });
+
+    await client.stop();
+    assume(queueInfo.queue).to.equal(queueName);
   });
 
   test('consumer (with failures)', async function() {
