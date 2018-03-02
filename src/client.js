@@ -68,7 +68,7 @@ class Client extends events.EventEmitter {
       assert(!username, 'Can\'t use `username` along with `connectionString`');
       assert(!password, 'Can\'t use `password` along with `connectionString`');
       assert(!hostname, 'Can\'t use `hostname` along with `connectionString`');
-      assert(!vhost, 'Can\'t use `hostname` along with `connectionString`');
+      assert(!vhost, 'Can\'t use `vhost` along with `connectionString`');
       this.connectionString = connectionString;
     } else {
       connectionString = buildConnectionString({username, password, hostname, vhost});
