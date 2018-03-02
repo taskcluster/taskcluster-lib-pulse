@@ -2,6 +2,7 @@ const events = require('events');
 const debug = require('debug');
 const amqplib = require('amqplib');
 const assert = require('assert');
+const {URL} = require('url');
 
 var clientCounter = 0;
 
@@ -14,7 +15,7 @@ var clientCounter = 0;
  * }
  */
 const buildConnectionString = function({username, password, hostname, vhost}) {
-  assert(username, 'options.username password is required');
+  assert(username, 'options.username is required');
   assert(password, 'options.password is required');
   assert(hostname, 'options.hostname is required');
   assert(vhost, 'options.vhost is required');
@@ -59,6 +60,8 @@ exports.buildConnectionString = buildConnectionString;
  * * vhost
  * * recycleInterval (ms; default 1h)
  * * retirementDelay (ms; default 30s)
+ *
+ * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
   constructor({username, password, hostname, vhost, connectionString, recycleInterval, retirementDelay}) {
@@ -70,8 +73,13 @@ class Client extends events.EventEmitter {
       assert(!hostname, 'Can\'t use `hostname` along with `connectionString`');
       assert(!vhost, 'Can\'t use `vhost` along with `connectionString`');
       this.connectionString = connectionString;
+
+      // extract the username as namespace
+      const connURL = new URL(connectionString);
+      this.namespace = decodeURI(connURL.username);
     } else {
-      connectionString = buildConnectionString({username, password, hostname, vhost});
+      this.connectionString = buildConnectionString({username, password, hostname, vhost});
+      this.namespace = username;
     }
 
     this.recycleInterval = recycleInterval || 3600 * 1000;
