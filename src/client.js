@@ -60,11 +60,13 @@ exports.buildConnectionString = buildConnectionString;
  * * vhost
  * * recycleInterval (ms; default 1h)
  * * retirementDelay (ms; default 30s)
+ * * monitor (taskcluster-lib-monitor instance)
  *
  * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
-  constructor({username, password, hostname, vhost, connectionString, recycleInterval, retirementDelay}) {
+  constructor({username, password, hostname, vhost, connectionString, recycleInterval,
+    retirementDelay, monitor}) {
     super();
 
     if (connectionString) {
@@ -81,6 +83,9 @@ class Client extends events.EventEmitter {
       this.connectionString = buildConnectionString({username, password, hostname, vhost});
       this.namespace = username;
     }
+
+    assert(monitor, 'monitor is required');
+    this.monitor = monitor;
 
     this.recycleInterval = recycleInterval || 3600 * 1000;
     this.retirementDelay = retirementDelay || 30 * 1000;
