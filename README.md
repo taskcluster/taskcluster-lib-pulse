@@ -57,6 +57,55 @@ method produces an error that might be fixed by reconnecting, call the
 connection's `failed` method.  This will mark the connection as failed and
 begin cretaing a new connection (culminating in another `connected` event).
 
+## Active Connection
+
+If a consumer might begin consuming after a Client has been started,
+`client.on('connected', setup)` is not enough -- `setup` will not be called
+until the next reconnection.  In this case, the `activeConnection` property is
+useful, giving the current active connection (or undefined, in which case there
+will soon be an active connection)
+
+```javascript
+client.on('connected', setup);
+if (client.activeConnection) {
+  setup(client.activeConnection);
+}
+```
+
+## Manipulating AMQP Objects
+
+If you have a one-off task that requires a connection, such as declaring an
+exchange,
+
+use `client.withChannel`, which will wait for a connection if necessary, then
+run your function with an amqplib channel or confirmChannel. If the function
+fails, it is not automatically retried, but the channel is closed.
+
+```javascript
+await client.withChannel(channel => { .. }, {confirmChannel: true});
+await client.withChannel(channel => { .. }, {confirmChannel: false});
+```
+
+There is also a more general `withConnection` which returns the `Connection`
+instance without creating a channel.
+
+```javascript
+await client.withConnection(conn => { .. });
+```
+
+The most common use case for these functions is to declare or delete objects on
+the AMQP server. For example:
+
+```javascript
+await client.withChannel(async chan => {
+  const exchangeName = client.objectName('exchange', 'notable-things');
+  await chan.assertExchange(exchangeName, 'topic');
+});
+```
+
+Note that this uses the `objectName` method to generate an exchange name
+compatible with the pulse access control model.
+
 ## Reconnection
 
 The `Client` instance will automatically reconnect periodically. This helps
