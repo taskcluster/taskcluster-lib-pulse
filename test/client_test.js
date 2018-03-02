@@ -4,6 +4,7 @@ const amqplib = require('amqplib');
 const assert = require('assert');
 const assume = require('assume');
 const debugModule = require('debug');
+const libMonitor = require('taskcluster-lib-monitor');
 
 const PULSE_CONNECTION_STRING = process.env.PULSE_CONNECTION_STRING;
 
@@ -54,10 +55,14 @@ const connectionTests = connectionString => {
   const message = new Buffer('Hello');
   const debug = debugModule('test');
 
-  setup(function() {
+  let monitor;
+
+  setup(async function() {
+    monitor = await libMonitor({project: 'tests', mock: true});
     client = new Client({
       connectionString,
       retirementDelay: 50,
+      monitor,
     });
   });
 
@@ -91,6 +96,7 @@ const connectionTests = connectionString => {
     let client = new Client({
       connectionString,
       recycleInterval: 10,
+      monitor,
     });
 
     let recycles = 0;
@@ -179,13 +185,14 @@ const connectionTests = connectionString => {
 };
 
 suite('Client', function() {
-  suite('constructor', function() {
+  suite('constructor', async function() {
+    const monitor = await libMonitor({project: 'tests', mock: true});
     test('rejects connectionString *and* username', function() {
-      assume(() => new Client({username: 'me', connectionString: 'amqps://..'}))
+      assume(() => new Client({username: 'me', connectionString: 'amqps://..', monitor}))
         .throws(/along with/);
     });
     test('requires either connectionString *or* username', function() {
-      assume(() => new Client({}))
+      assume(() => new Client({monitor}))
         .throws(/is required/);
     });
   });
