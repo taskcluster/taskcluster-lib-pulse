@@ -1,4 +1,5 @@
-const {Client, buildConnectionString} = require('../src/client');
+const {Client} = require('../src');
+const {buildConnectionString} = require('../src/client');
 const amqplib = require('amqplib');
 const assert = require('assert');
 const assume = require('assume');
