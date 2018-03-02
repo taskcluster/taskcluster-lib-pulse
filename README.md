@@ -108,7 +108,7 @@ client.on('connected', async (conn) => {
     await channel.assertQueue(queueName);
     await channel.bindQueue(queueName, exchangeName, routingKeyPattern);
 
-    consumer = channel.consume(queueName, (msg) => {
+    consumer = await channel.consume(queueName, (msg) => {
       // do something with the message, then ack it..
       channel.ack(msg);
     });
