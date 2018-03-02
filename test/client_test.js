@@ -200,7 +200,7 @@ const connectionTests = connectionString => {
   });
 
   test('withChannel', async function() {
-    const queueName = `queue/${client.namespace}/${slugid.v4()}`;
+    const queueName = client.fullObjectName('queue', slugid.v4());
 
     client.start();
 
