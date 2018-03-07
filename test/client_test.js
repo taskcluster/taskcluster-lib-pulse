@@ -67,6 +67,7 @@ const connectionTests = connectionString => {
     client = new Client({
       connectionString,
       retirementDelay: 50,
+      minReconnectionInterval: 20,
       monitor,
     });
   });
@@ -114,10 +115,11 @@ const connectionTests = connectionString => {
     assume(client.activeConnection).to.equal(undefined);
   });
 
-  test('reconnect interval', async function() {
+  test('recycle interval', async function() {
     let client = new Client({
       connectionString,
       recycleInterval: 10,
+      retirementDelay: 50,
       monitor,
     });
 
@@ -127,6 +129,34 @@ const connectionTests = connectionString => {
     await new Promise(resolve => setTimeout(resolve, 100));
     await client.stop();
     assume(recycles).is.gt(5);
+  });
+
+  test('minReconnectionInterval', async function() {
+    let client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 10,
+      monitor,
+    });
+
+    let connections = 0;
+    const oldConnect = amqplib.connect;
+    amqplib.connect = async () => {
+      connections++;
+      throw new Error('uhoh');
+    };
+
+    try {
+      // Run the client for 100ms.  At 10ms per connection, wes should get about 10
+      // connections; if the minReconnectionInterval doesn't work, we'll get a lot
+      // more than that!
+      client.start();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await client.stop();
+    } finally {
+      amqplib.connect = oldConnect;
+    }
+    assume(connections).is.between(5, 15);
   });
 
   test('start and stop after connection is established', async function() {
