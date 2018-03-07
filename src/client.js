@@ -56,13 +56,14 @@ exports.buildConnectionString = buildConnectionString;
  * * hostname
  * * recycleInterval (ms; default 1h)
  * * retirementDelay (ms; default 30s)
+ * * minReconnectionInterval (ms; default 15s)
  * * monitor (taskcluster-lib-monitor instance)
  *
  * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
   constructor({username, password, hostname, connectionString, recycleInterval,
-    retirementDelay, monitor}) {
+    retirementDelay, minReconnectionInterval, monitor}) {
     super();
 
     if (connectionString) {
@@ -84,9 +85,11 @@ class Client extends events.EventEmitter {
 
     this.recycleInterval = recycleInterval || 3600 * 1000;
     this.retirementDelay = retirementDelay || 30 * 1000;
+    this.minReconnectionInterval = minReconnectionInterval || 15 * 1000;
     this.running = false;
     this.connections = [];
     this.connectionCounter = 0;
+    this.lastConnectionTime = 0;
 
     this.id = ++clientCounter;
     this.debug = debug(`taskcluster-lib-pulse:client:${this.id}`);
@@ -137,6 +140,15 @@ class Client extends events.EventEmitter {
 
     if (this.running) {
       const newConn = new Connection(this, ++this.connectionCounter);
+
+      // don't actually start connecting until at lesat minReconnectionInterval has passed
+      const earliestConnectionTime = this.lastConnectionTime + this.minReconnectionInterval;
+      const now = new Date().getTime();
+      setTimeout(() => {
+        this.lastConnectionTime = new Date().getTime();
+        newConn.connect();
+      }, now < earliestConnectionTime ? earliestConnectionTime - now : 0);
+
       newConn.once('connected', () => {
         this.emit('connected', newConn);
       });
@@ -241,6 +253,7 @@ exports.Client = Client;
  *
  * A connection's state can be one of
  *
+ *  - waiting -- waiting for a call to connect() (for minReconnectionInterval)
  *  - connecting -- waiting for a connection to complete
  *  - connected -- connection is up and running
  *  - retiring -- in the process of retiring
@@ -260,10 +273,15 @@ class Connection extends events.EventEmitter {
 
     this.debug = debug(`taskcluster-lib-pulse:connection:${client.id}.${id}`);
 
-    this.connect();
+    this.debug('waiting');
+    this.state = 'waiting';
   }
 
   connect() {
+    if (this.state !== 'waiting') {
+      return;
+    }
+
     this.debug('connecting');
     this.state = 'connecting';
 
@@ -300,8 +318,6 @@ class Connection extends events.EventEmitter {
         this.emit('connected');
       },
       err => {
-        // TODO: make a minimum interval between connection attempts, to avoid
-        // issue with bad credentials
         this.debug(`Error while connecting: ${err}`);
         this.failed();
       });
