@@ -1,4 +1,4 @@
-const {Client, PulseQueue} = require('../src');
+const {Client, consume} = require('../src');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
@@ -55,43 +55,46 @@ suite('PulseQueue', function() {
       monitor,
     });
     const got = [];
-    await new Promise((resolve, reject) => {
-      const pq = new PulseQueue({
-        client,
-        queueName: unique,
-        bindings: [{
-          exchange: exchangeName,
-          routingKeyPattern: '#',
-          routingKeyReference,
-        }],
-        prefetch: 2,
-        handleMessage: async message => {
-          debug(`handling message ${message.payload.i}`);
-          // message three gets retried once and then discarded.
-          if (message.payload.i == 3) {
-            // inject an error to test retrying
-            throw new Error('uhoh');
-          }
+    client.start();
 
-          // recycle the client after we've had a few messages, just for exercise.
-          // Note that we continue to process this message here
-          if (got.length == 4) {
-            client.recycle();
-          }
-          got.push(message);
-          if (got.length === 9) {
-            // stop the PulseQueue first, to exercise that code
-            // (this isn't how pq.stop would normally be called!)
-            pq.stop().then(resolve, reject);
-          }
-        },
-      });
+    await new Promise(async (resolve, reject) => {
+      try {
+        const pq = await consume({
+          client,
+          queueName: unique,
+          bindings: [{
+            exchange: exchangeName,
+            routingKeyPattern: '#',
+            routingKeyReference,
+          }],
+          prefetch: 2,
+          handleMessage: async message => {
+            debug(`handling message ${message.payload.i}`);
+            // message three gets retried once and then discarded.
+            if (message.payload.i == 3) {
+              // inject an error to test retrying
+              throw new Error('uhoh');
+            }
 
-      client.start();
+            // recycle the client after we've had a few messages, just for exercise.
+            // Note that we continue to process this message here
+            if (got.length == 4) {
+              client.recycle();
+            }
+            got.push(message);
+            if (got.length === 9) {
+              // stop the PulseQueue first, to exercise that code
+              // (this isn't how pq.stop would normally be called!)
+              pq.stop().then(resolve, reject);
+            }
+          },
+        });
 
-      // start up the PulseQueue first, to make sure the queue is bound
-      // before producing messages
-      pq.start().then(publishMessages).catch(reject);
+        // queue is bound by now, so it's safe to send messages
+        await publishMessages();
+      } catch (err) {
+        reject(err);
+      }
     });
 
     await client.stop();
@@ -123,9 +126,14 @@ suite('PulseQueue', function() {
       minReconnectionInterval: 20,
       monitor,
     });
-    assume(() => {
-      new PulseQueue({client, bindings: [], handleMessage: () => {}});
-    }).to.throw(/Must pass a queueName or exclusiveQueue/);
+
+    try {
+      await consume({client, bindings: [], handleMessage: () => {}});
+    } catch (err) {
+      assume(err).to.match(/Must pass a queueName or exclusiveQueue/);
+      return;
+    }
+    assert(false, 'Did not get expected error');
   });
 
   test('exclusive PulseQueue emits error on reconnect', async function() {
@@ -136,8 +144,8 @@ suite('PulseQueue', function() {
       minReconnectionInterval: 20,
       monitor,
     });
-    const got = [];
-    const pq = new PulseQueue({
+    client.start();
+    const pq = await consume({
       client,
       bindings: [{
         exchange: exchangeName,
@@ -159,8 +167,6 @@ suite('PulseQueue', function() {
       });
     });
 
-    client.start();
-    await pq.start();
     await publishMessages();
     await gotError;
     await client.stop();
