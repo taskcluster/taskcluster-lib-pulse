@@ -37,7 +37,7 @@ const client = new pulse.Client({
 ```
 
 The `Client` is responsible for connecting, and re-connecting, to the pulse
-server. Once started, it will do so automatically until stopped.
+server. Once created, it will do so automatically until stopped.
 
 Other options to the constructor:
 
@@ -186,8 +186,6 @@ client.on('connected', async (conn) => {
     conn.failed();
   }
 });
-
-client.start();
 ```
 
 # PulseQueue
