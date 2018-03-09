@@ -93,13 +93,7 @@ class Client extends events.EventEmitter {
 
     this.id = ++clientCounter;
     this.debug = debug(`taskcluster-lib-pulse:client:${this.id}`);
-  }
 
-  /**
-   * Start connecting and stay connected until stop() is called
-   */
-  start() {
-    assert(!this.running, 'Already running');
     this.debug('starting');
     this.running = true;
     this.recycle();

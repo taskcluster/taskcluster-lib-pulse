@@ -46,8 +46,6 @@ suite('buildConnectionString', function() {
 });
 
 const connectionTests = connectionString => {
-  let client;
-
   // use a unique name for each test run, just to ensure nothing interferes
   const unique = new Date().getTime().toString();
   const exchangeName = `exchanges/test/${unique}`;
@@ -60,12 +58,6 @@ const connectionTests = connectionString => {
 
   setup(async function() {
     monitor = await libMonitor({project: 'tests', mock: true});
-    client = new Client({
-      connectionString,
-      retirementDelay: 50,
-      minReconnectionInterval: 20,
-      monitor,
-    });
   });
 
   // publish a message to the exchange using just amqplib, declaring the
@@ -88,13 +80,24 @@ const connectionTests = connectionString => {
 
   test('start and immediately stop', async function() {
     let gotConnection = false;
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
     client.on('connected', () => { gotConnection = true; });
-    client.start();
     await client.stop();
     assume(gotConnection).to.equal(false);
   });
 
   test('activeConnection', async function() {
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
     assume(client.activeConnection).to.equal(undefined);
     await new Promise((resolve, reject) => {
       client.on('connected', conn => {
@@ -105,36 +108,32 @@ const connectionTests = connectionString => {
         }
         resolve();
       });
-      client.start();
     });
     await client.stop();
     assume(client.activeConnection).to.equal(undefined);
   });
 
   test('recycle interval', async function() {
-    let client = new Client({
-      connectionString,
-      recycleInterval: 10,
-      retirementDelay: 50,
-      monitor,
-    });
-
     let recycles = 0;
-    client.recycle = () => { recycles++; };
-    client.start();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await client.stop();
-    assume(recycles).is.gt(5);
+    const oldMethod = Client.prototype.recycle;
+    Client.prototype.recycle = () => { recycles++; };
+    try {
+      const client = new Client({
+        connectionString,
+        recycleInterval: 10,
+        retirementDelay: 50,
+        monitor,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await client.stop();
+      assume(recycles).is.gt(5);
+    } finally {
+      Client.prototype.recycle = oldMethod;
+    }
   });
 
   test('minReconnectionInterval', async function() {
-    let client = new Client({
-      connectionString,
-      retirementDelay: 50,
-      minReconnectionInterval: 10,
-      monitor,
-    });
-
     let connections = 0;
     const oldConnect = amqplib.connect;
     amqplib.connect = async () => {
@@ -142,11 +141,17 @@ const connectionTests = connectionString => {
       throw new Error('uhoh');
     };
 
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 10,
+      monitor,
+    });
+
     try {
       // Run the client for 100ms.  At 10ms per connection, wes should get about 10
       // connections; if the minReconnectionInterval doesn't work, we'll get a lot
       // more than that!
-      client.start();
       await new Promise(resolve => setTimeout(resolve, 100));
       await client.stop();
     } finally {
@@ -156,15 +161,28 @@ const connectionTests = connectionString => {
   });
 
   test('start and stop after connection is established', async function() {
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
+
     await new Promise((resolve, reject) => {
       client.on('connected', () => {
         client.stop().then(resolve, reject);
       });
-      client.start();
     });
   });
 
   test('start, fail, and then stop', async function() {
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
+
     await new Promise((resolve, reject) => {
       client.once('connected', connection => {
         connection.failed();
@@ -172,11 +190,17 @@ const connectionTests = connectionString => {
           client.stop().then(resolve, reject);
         });
       });
-      client.start();
     });
   });
 
   test('withConnection', async function() {
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
+
     let gotConnection = false;
     let finishedWithConnection = false;
     client.withConnection(conn => { gotConnection = true; })
@@ -187,7 +211,6 @@ const connectionTests = connectionString => {
       client.once('connected', () => {
         client.stop().then(resolve, reject);
       });
-      client.start();
     });
 
     // check that the withConnection function was called, and that its
@@ -196,9 +219,14 @@ const connectionTests = connectionString => {
   });
 
   test('withChannel', async function() {
-    const queueName = client.fullObjectName('queue', slugid.v4());
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
 
-    client.start();
+    const queueName = client.fullObjectName('queue', slugid.v4());
 
     let gotException;
     try {
@@ -228,6 +256,13 @@ const connectionTests = connectionString => {
   });
 
   test('consumer (with failures)', async function() {
+    const client = new Client({
+      connectionString,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
+
     let failureCount = 0;
     let messageReceived = 0;
 
@@ -273,7 +308,6 @@ const connectionTests = connectionString => {
 
         // start publishing the message
         publishMessage().catch(reject);
-        client.start();
       });
 
       assume(messageReceived).to.equal(1);

@@ -55,7 +55,6 @@ suite('PulseQueue', function() {
       monitor,
     });
     const got = [];
-    client.start();
 
     await new Promise(async (resolve, reject) => {
       try {
@@ -131,9 +130,11 @@ suite('PulseQueue', function() {
       await consume({client, bindings: [], handleMessage: () => {}});
     } catch (err) {
       assume(err).to.match(/Must pass a queueName or exclusiveQueue/);
+      await client.stop();
       return;
     }
     assert(false, 'Did not get expected error');
+
   });
 
   test('exclusive PulseQueue emits error on reconnect', async function() {
@@ -144,7 +145,6 @@ suite('PulseQueue', function() {
       minReconnectionInterval: 20,
       monitor,
     });
-    client.start();
     const pq = await consume({
       client,
       bindings: [{
