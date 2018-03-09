@@ -194,10 +194,10 @@ client.start();
 A PulseQueue declares a queue and listens for messages on that
 queue, invoking a callback for each messages.
 
-The options to the constructor are:
+Construct a PulseQueue with the async `consume` function:
 
 ```javascript
-let pq = new pulse.PulseQueue({
+let pq = await pulse.consume({
   client,                // Client object for connecting to the server
   bindings: [{           // exchange/routingKey patterns to bind to
     exchange,            // Exchange to bind
@@ -230,17 +230,13 @@ arrive, then the listener will parse the routing key and make it available as a
 dictionary on the message.  Note that bindings are easily constructed using the
 taskcluster-client library.
 
-The instance does not start consuming messages until `pq.start()`. When this
-function's promise has resolved, the queue exists and all bindings are in place.
+The instance starts consuming messages immediately. When the `consume` function's
+promise has resolved, the queue exists and all bindings are in place.
 At this time, it is safe to initiate any actions that might generate messages
 you wish to receive.
 
-```javascript
-await pq.start();
-```
-
-Similarly, call `pq.stop()` to stop consuming messages.  A PulseQueue cannot be
-restarted after stopping -- instead, create a new instance.
+Call `pq.stop()` to stop consuming messages.  A PulseQueue cannot be restarted
+after stopping -- instead, create a new instance.
 
 When a message is received, `handleMessage` is called (asynchronously) with
 a message of the form:

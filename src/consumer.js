@@ -39,8 +39,10 @@ class PulseQueue extends events.EventEmitter {
    * Create and bind the queue, then start listening.  When this method has
    * returned, the queue is established and bound to the exchanges given in
    * the consumer.
+   *
+   * In the public API, this is called automatically by `consume`
    */
-  async start() {
+  async _start() {
     // first make sure the queue is bound
     await this.client.withChannel(channel => this._createAndBindQueue(channel));
 
@@ -254,9 +256,10 @@ class PulseQueue extends events.EventEmitter {
   }
 }
 
-exports.PulseQueue = PulseQueue;
+const consume = async (options) => {
+  const pq = new PulseQueue(options);
+  await pq._start();
+  return pq;
+};
 
-// TODO: unbindQueue static method
-//  - listen to client for connections
-//  - try to unbind with a connection
-//  - resolve promise when done
+exports.consume = consume;

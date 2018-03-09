@@ -1,7 +1,7 @@
 const {Client} = require('./client');
-const {PulseQueue} = require('./consumer');
+const {consume} = require('./consumer');
 
 module.exports = {
   Client,
-  PulseQueue,
+  consume,
 };
