@@ -1,4 +1,5 @@
 const {Client, consume} = require('../src');
+const sinon = require('sinon');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
@@ -102,7 +103,8 @@ suite('PulseQueue', function() {
         });
 
         // queue is bound by now, so it's safe to send messages
-        await publishFakeMessage();
+        //sinon.stub(pq, 'stop').callsFake(() => Promise.resolve());
+        await publishFakeMessages(pq);
       } catch (err) {
         reject(err);
       }
