@@ -103,7 +103,7 @@ suite('PulseQueue', function() {
         });
 
         // queue is bound by now, so it's safe to send messages
-        //sinon.stub(pq, 'stop').callsFake(() => Promise.resolve());
+        sinon.stub(pq, 'stop').callsFake(() => Promise.resolve());
         await publishFakeMessages(pq);
       } catch (err) {
         reject(err);
