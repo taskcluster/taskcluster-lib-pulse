@@ -271,7 +271,7 @@ class Connection extends events.EventEmitter {
     this.state = 'waiting';
   }
 
-  connect() {
+  async connect() {
     if (this.state !== 'waiting') {
       return;
     }
@@ -279,42 +279,42 @@ class Connection extends events.EventEmitter {
     this.debug('connecting');
     this.state = 'connecting';
 
-    amqplib.connect(this.client.connectionString, {
+    const amqp = await amqplib.connect(this.client.connectionString, {
       heartbeat: 120,
       noDelay: true,
       timeout: 30 * 1000,
-    }).then(
-      amqp => {
-        if (this.state !== 'connecting') {
-          // we may have been retired already, in which case we do not need this
-          // connection
-          amqp.close();
-          return;
+    }).catch(err => {
+      this.debug(`Error while connecting: ${err}`);
+      this.failed();
+    });
+    
+    if (amqp) {
+      if (this.state !== 'connecting') {
+        // we may have been retired already, in which case we do not need this
+        // connection
+        amqp.close();
+        return;
+      }
+      this.amqp = amqp;
+  
+      amqp.on('error', err => {
+        if (this.state === 'connected') {
+          this.debug(`error from aqplib connection: ${err}`);
+          this.failed();
         }
-        this.amqp = amqp;
-
-        amqp.on('error', err => {
-          if (this.state === 'connected') {
-            this.debug(`error from aqplib connection: ${err}`);
-            this.failed();
-          }
-        });
-
-        amqp.on('close', err => {
-          if (this.state === 'connected') {
-            this.debug('connection closed unexpectedly');
-            this.failed();
-          }
-        });
-
-        this.debug('connected');
-        this.state = 'connected';
-        this.emit('connected');
-      },
-      err => {
-        this.debug(`Error while connecting: ${err}`);
-        this.failed();
       });
+  
+      amqp.on('close', err => {
+        if (this.state === 'connected') {
+          this.debug('connection closed unexpectedly');
+          this.failed();
+        }
+      });
+  
+      this.debug('connected');
+      this.state = 'connected';
+      this.emit('connected'); 
+    } 
   }
 
   failed() {
