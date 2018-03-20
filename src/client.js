@@ -88,9 +88,9 @@ class Client extends events.EventEmitter {
     assert(monitor, 'monitor is required');
     this.monitor = monitor;
 
-    this.recycleInterval = recycleInterval || 3600 * 1000;
-    this.retirementDelay = retirementDelay || 30 * 1000;
-    this.minReconnectionInterval = minReconnectionInterval || 15 * 1000;
+    this._recycleInterval = recycleInterval || 3600 * 1000;
+    this._retirementDelay = retirementDelay || 30 * 1000;
+    this._minReconnectionInterval = minReconnectionInterval || 15 * 1000;
     this.running = false;
     this.connections = [];
     this.connectionCounter = 0;
@@ -105,7 +105,7 @@ class Client extends events.EventEmitter {
 
     this._interval = setInterval(
       () => this.recycle(),
-      this.recycleInterval);
+      this._recycleInterval);
   }
 
   async stop() {
@@ -141,7 +141,7 @@ class Client extends events.EventEmitter {
       const newConn = new Connection(this, ++this.connectionCounter);
 
       // don't actually start connecting until at lesat minReconnectionInterval has passed
-      const earliestConnectionTime = this.lastConnectionTime + this.minReconnectionInterval;
+      const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
       const now = new Date().getTime();
       setTimeout(() => {
         this.lastConnectionTime = new Date().getTime();
@@ -351,7 +351,7 @@ class Connection extends events.EventEmitter {
       this.amqp = null;
       this.state = 'finished';
       this.emit('finished');
-    }, this.client.retirementDelay);
+    }, this.client._retirementDelay);
   }
 }
 
