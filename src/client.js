@@ -160,7 +160,7 @@ class Client extends events.EventEmitter {
 
   /**
    * Get a full object name, following the Pulse security model,
-   * `<kind>/<namespace>/<name`.  This is useful for manipulating these objects
+   * `<kind>/<namespace>/<name>`.  This is useful for manipulating these objects
    * directly, for example to modify the bindings of an active queue.
    */
   fullObjectName(kind, name) {
