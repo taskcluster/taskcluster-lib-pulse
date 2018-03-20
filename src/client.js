@@ -147,7 +147,7 @@ class Client extends events.EventEmitter {
         this.emit('connected', newConn);
       });
       newConn.once('finished', () => {
-        this.connections = this.connections.filter(conn => conn.id !== newConn.id);
+        this.connections = this.connections.filter(conn => conn !== newConn);
       });
       this.connections.unshift(newConn);
     }
