@@ -117,6 +117,82 @@ suite('PulseQueue', function() {
     assume(numbers).to.deeply.equal([0, 1, 2, 4, 5, 6, 7, 8, 9]);
   });
 
+  test('consume messages with some incorrect bindings', async function() {
+    const monitor = await libMonitor({project: 'tests', mock: true});
+    const client = new Client({
+      connectionString: PULSE_CONNECTION_STRING,
+      retirementDelay: 50,
+      minReconnectionInterval: 20,
+      monitor,
+    });
+    const got = [];
+
+    await new Promise(async (resolve, reject) => {
+      try {
+        const pq = await consume({
+          client,
+          queueName: unique,
+          bindings: [{
+            exchange: exchangeName,
+            routingKeyPattern: '#',
+            routingKeyReference,
+          },
+          {
+            exchange: 'bad-exchange',
+            routingKeyPattern: '#',
+            routingKeyReference,
+          }],
+          prefetch: 2,
+          handleMessage: async message => {
+            debug(`handling message ${message.payload.i}`);
+            // message three gets retried once and then discarded.
+            if (message.payload.i == 3) {
+              // inject an error to test retrying
+              throw new Error('uhoh');
+            }
+
+            // recycle the client after we've had a few messages, just for exercise.
+            // Note that we continue to process this message here
+            if (got.length == 4) {
+              client.recycle();
+            }
+            got.push(message);
+            if (got.length === 9) {
+              // stop the PulseQueue first, to exercise that code
+              // (this isn't how pq.stop would normally be called!)
+              pq.stop().then(resolve, reject);
+            }
+          },
+        });
+
+        // queue is bound by now, so it's safe to send messages
+        await publishMessages();
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    await client.stop();
+
+    got.forEach(msg => {
+      assume(msg.payload.data).to.deeply.equal('Hello');
+      assume(msg.exchange).to.equal(exchangeName);
+      assume(msg.routingKey).to.equal(routingKey);
+      assume(msg.routing).to.deeply.equal({
+        verb: 'greetings',
+        object: 'earthling',
+        remainder: 'foo.bar.bing',
+      });
+      // note that we ignore redelivered: some of these may be redelivered
+      // when the connection is recycled..
+      assume(msg.routes).to.deeply.equal([]);
+    });
+
+    const numbers = got.map(msg => msg.payload.i);
+    numbers.sort(); // with prefetch, order is not guaranteed
+    assume(numbers).to.deeply.equal([0, 1, 2, 4, 5, 6, 7, 8, 9]);
+  });
+
   test('no queueuName without exclusiveQueue is an error', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
@@ -136,7 +212,7 @@ suite('PulseQueue', function() {
     assert(false, 'Did not get expected error');
 
   });
-
+  
   test('exclusive PulseQueue emits error on reconnect', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
