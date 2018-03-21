@@ -140,7 +140,7 @@ class Client extends events.EventEmitter {
     if (this.running) {
       const newConn = new Connection(this, ++this.connectionCounter);
 
-      // don't actually start connecting until at lesat minReconnectionInterval has passed
+      // don't actually start connecting until at least minReconnectionInterval has passed
       const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
       const now = new Date().getTime();
       setTimeout(() => {
@@ -203,22 +203,27 @@ class Client extends events.EventEmitter {
    */
   withChannel(fn, {confirmChannel} = {}) {
     return this.withConnection(async conn => {
+      let flag = 0;
       const method = confirmChannel ? 'createConfirmChannel' : 'createChannel';
-      const channel = await conn.amqp[method]();
+      const channel = await conn.amqp[method]().catch(e => {
+        // indication of failure
+        flag = 1;
+      });
 
-      // consider any errors on the channel to be potentially fatal to the whole
-      // connection, out of an abundance of caution
-      channel.on('error', () => this.recycle());
+      if (flag === 1) {
+        return;
+      }
 
+      let returntype; // maybe useful for debugging
       try {
-        return await fn(channel);
+        returntype = await fn(channel);
       } finally {
         try {
-          await channel.close();
+          if (isNaN(returntype)) {
+            channel.close();
+          }
         } catch (err) {
-          // an error trying to close the channel suggests the connection is dead, so
-          // recycle, but continue to throw the first error
-          this.recycle();
+          // an error trying to close the channel suggests the connection is dead
         }
       }
     });
@@ -283,17 +288,12 @@ class Connection extends events.EventEmitter {
 
     this.debug('connecting');
     this.state = 'connecting';
-
-    const amqp = await amqplib.connect(this.client.connectionString, {
-      heartbeat: 120,
-      noDelay: true,
-      timeout: 30 * 1000,
-    }).catch(err => {
-      this.debug(`Error while connecting: ${err}`);
-      this.failed();
-    });
-
-    if (amqp) {
+    try {
+      const amqp = await amqplib.connect(this.client.connectionString, {
+        heartbeat: 120,
+        noDelay: true,
+        timeout: 30 * 1000,
+      });
       if (this.state !== 'connecting') {
         // we may have been retired already, in which case we do not need this
         // connection
@@ -304,7 +304,7 @@ class Connection extends events.EventEmitter {
 
       amqp.on('error', err => {
         if (this.state === 'connected') {
-          this.debug(`error from aqplib connection: ${err}`);
+          this.debug(`error from amqplib connection: ${err}`);
           this.failed();
         }
       });
@@ -315,11 +315,13 @@ class Connection extends events.EventEmitter {
           this.failed();
         }
       });
-
       this.debug('connected');
       this.state = 'connected';
       this.emit('connected');
-    }
+    } catch (err) {
+      this.debug(`Error while connecting: ${err}`);
+      this.failed();
+    };
   }
 
   failed() {
@@ -344,7 +346,7 @@ class Connection extends events.EventEmitter {
     await new Promise(resolve => setTimeout(resolve, this.client._retirementDelay));
     this.debug('finished; closing AMQP connection');
     try {
-      this.amqp.close();
+      await this.amqp.close();
     } catch (err) {
       // ignore..
     }
