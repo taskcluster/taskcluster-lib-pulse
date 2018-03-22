@@ -1,4 +1,5 @@
 const {Client, consume} = require('../src');
+const sinon = require('sinon');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
@@ -46,6 +47,18 @@ suite('PulseQueue', function() {
     await conn.close();
   };
 
+  const publishFakeMessages = async (pq) => {
+    for (let i=0; i < 10; i++) {
+      const fields = {exchange : exchangeName, routingKey, redelivered:false};
+      const message = {content :new Buffer(JSON.stringify({data: 'Hello', i})), fields:fields};
+      try {
+        await pq._handleMessage(message);
+      } catch (err) {
+        pq.client.monitor.reportError(err, {message});
+      }
+    }
+  };
+
   test('consume messages', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
@@ -90,7 +103,8 @@ suite('PulseQueue', function() {
         });
 
         // queue is bound by now, so it's safe to send messages
-        await publishMessages();
+        sinon.stub(pq, 'stop').callsFake(() => Promise.resolve());
+        await publishFakeMessages(pq);
       } catch (err) {
         reject(err);
       }
