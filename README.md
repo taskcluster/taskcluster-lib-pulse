@@ -55,10 +55,10 @@ Other options to the constructor:
 
 AMQP is a very connection-oriented protocol, so as a user of this library, you
 will need to set up each new connection.  To do so, set up an event listener
-for the `connected` event from the client:
+in a handler for the `connected` event from the client:
 
 ```javascript
-client.on('connected', conn => {
+client.onConnected(conn => {
   // ...
 });
 ```
@@ -67,6 +67,11 @@ The `conn` value of this event is a `Connection` instance, from this library.
 The amqplib connection is available as `conn.amqp`. The listener should create
 any necessary channels, declare queues and exchanges, and - if consuming
 messages - bind to those queues.
+
+The `onConnected` method is a shorthand for `on('connected', ..)` that also
+calls the handler immediately if the Client is already connected. Its return
+value can be used with `client.removeListener` just like any other EventEmitter
+listener.
 
 Note that declaring non-durable queues in this method may lead to message loss
 or duplication: when this connection fails, the server will delete the queues
@@ -80,18 +85,10 @@ begin cretaing a new connection (culminating in another `connected` event).
 
 ## Active Connection
 
-If a consumer might begin consuming after a Client has been started,
-`client.on('connected', setup)` is not enough -- `setup` will not be called
-until the next reconnection.  In this case, the `activeConnection` property is
-useful, giving the current active connection (or undefined, in which case there
-will soon be an active connection)
-
-```javascript
-client.on('connected', setup);
-if (client.activeConnection) {
-  setup(client.activeConnection);
-}
-```
+The `activeConnection` property contains the current Connection, or undefined
+if no connection exists at the moment. In most cases, you will want to use
+`onConnected` or `withConnection` to get access to a Client's connection,
+rather than this property.
 
 ## Manipulating AMQP Objects
 

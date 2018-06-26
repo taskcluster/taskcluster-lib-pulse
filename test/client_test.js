@@ -173,7 +173,7 @@ const connectionTests = connectionString => {
     });
 
     await new Promise((resolve, reject) => {
-      client.on('connected', () => {
+      client.onConnected(() => {
         client.stop().then(resolve, reject);
       });
     });

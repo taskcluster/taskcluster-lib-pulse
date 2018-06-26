@@ -167,6 +167,19 @@ class Client extends events.EventEmitter {
   }
 
   /**
+   * Listen for a `connected` event, but call the handler with the existing connection
+   * if this client is already connected.
+   */
+  onConnected(handler) {
+    const res = this.on('connected', handler);
+    const conn = this.activeConnection;
+    if (conn) {
+      handler(conn);
+    }
+    return res;
+  }
+
+  /**
    * The active connection, if any.  This is useful when starting to use an already-
    * running client:
    *   client.on('connected', setupConnection);
