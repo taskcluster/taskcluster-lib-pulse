@@ -105,23 +105,8 @@ class PulseQueue extends events.EventEmitter {
       maxLength: this.options.maxLength,
     });
 
-    let flag = 0;
-    //flag :1 => connection closing, 2 => channel error
-
     for (let {exchange, routingKeyPattern} of this.bindings) {
-      await channel.bindQueue(queueName, exchange, routingKeyPattern).catch(async e => {
-        const err = e.toString();
-        if (err.search('404')) {
-          flag = 2;
-          this.bindings = this.bindings.filter(binding => binding.exchange !== exchange);
-          await this.client.withChannel(channel => this._createAndBindQueue(channel));
-        } else {
-          flag = 1;
-        }
-      });
-      if (flag !== 0) {
-        return flag;
-      }
+      await channel.bindQueue(queueName, exchange, routingKeyPattern);
     }
 
     return queueName;
@@ -140,14 +125,12 @@ class PulseQueue extends events.EventEmitter {
       const amqp = conn.amqp;
       const channel = await amqp.createChannel();
       await channel.prefetch(this.options.prefetch);
-      const queueName = await this._createAndBindQueue(channel);
-
-      /*
-      no channel error shall occur here as incorrect bindings have already being filter out
-      when first time queue was binded using the first client connection
-      */
-
+      const queueName = await await this._createAndBindQueue(channel);
       this.channel = channel;
+
+      // consider any errors on the channel to be potentially fatal to the
+      // connection (better safe than sorry)
+      channel.on('error', () => conn.failed());
 
       const consumer = await channel.consume(queueName, async (msg) => {
         try {
