@@ -331,7 +331,7 @@ class Connection extends events.EventEmitter {
     this.client.recycle();
   }
 
-  async retire() {
+  retire() {
     if (this.state === 'retiring' || this.state === 'finished') {
       return;
     }
@@ -341,16 +341,17 @@ class Connection extends events.EventEmitter {
     this.emit('retiring');
 
     // actually close this connection 30 seconds later
-    await new Promise(resolve => setTimeout(resolve, this.client._retirementDelay));
-    this.debug('finished; closing AMQP connection');
-    try {
-      this.amqp.close();
-    } catch (err) {
-      // ignore..
-    }
-    this.amqp = null;
-    this.state = 'finished';
-    this.emit('finished');
+    setTimeout(() => {
+      this.debug('finished; closing AMQP connection');
+      try {
+        this.amqp.close();
+      } catch (err) {
+        // ignore..
+      }
+      this.amqp = null;
+      this.state = 'finished';
+      this.emit('finished');
+    }, this.client._retirementDelay);
   }
 }
 
