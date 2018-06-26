@@ -1,7 +1,6 @@
 const events = require('events');
 const amqplib = require('amqplib');
 const assert = require('assert');
-const slugid = require('slugid');
 
 /**
  * A PulseConsumer declares a queue and listens for messages on that
