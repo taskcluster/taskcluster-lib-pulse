@@ -8,8 +8,10 @@ const slugid = require('slugid');
  * queue, invoking a callback for each message.
  */
 class PulseConsumer extends events.EventEmitter {
-  constructor({client, bindings, handleMessage, queueName, exclusiveQueue, ...options}) {
+  constructor({client, bindings, queueName, exclusiveQueue, ...options}, handleMessage) {
     super();
+
+    assert(handleMessage, 'Must provide a message handler function');
 
     this.client = client;
     this.bindings = bindings;
@@ -256,8 +258,8 @@ class PulseConsumer extends events.EventEmitter {
   }
 }
 
-const consume = async (options) => {
-  const pq = new PulseConsumer(options);
+const consume = async (options, handleMessage) => {
+  const pq = new PulseConsumer(options, handleMessage);
   await pq._start();
   return pq;
 };

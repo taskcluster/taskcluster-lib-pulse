@@ -67,26 +67,25 @@ suite('PulseConsumer', function() {
             routingKeyReference,
           }],
           prefetch: 2,
-          handleMessage: async message => {
-            debug(`handling message ${message.payload.i}`);
-            // message three gets retried once and then discarded.
-            if (message.payload.i == 3) {
-              // inject an error to test retrying
-              throw new Error('uhoh');
-            }
+        }, async message => {
+          debug(`handling message ${message.payload.i}`);
+          // message three gets retried once and then discarded.
+          if (message.payload.i == 3) {
+            // inject an error to test retrying
+            throw new Error('uhoh');
+          }
 
-            // recycle the client after we've had a few messages, just for exercise.
-            // Note that we continue to process this message here
-            if (got.length == 4) {
-              client.recycle();
-            }
-            got.push(message);
-            if (got.length === 9) {
-              // stop the PulseConsumer first, to exercise that code
-              // (this isn't how pq.stop would normally be called!)
-              pq.stop().then(resolve, reject);
-            }
-          },
+          // recycle the client after we've had a few messages, just for exercise.
+          // Note that we continue to process this message here
+          if (got.length == 4) {
+            client.recycle();
+          }
+          got.push(message);
+          if (got.length === 9) {
+            // stop the PulseConsumer first, to exercise that code
+            // (this isn't how pq.stop would normally be called!)
+            pq.stop().then(resolve, reject);
+          }
         });
 
         // queue is bound by now, so it's safe to send messages
@@ -127,7 +126,7 @@ suite('PulseConsumer', function() {
     });
 
     try {
-      await consume({client, bindings: [], handleMessage: () => {}});
+      await consume({client, bindings: []}, () => {});
     } catch (err) {
       assume(err).to.match(/Must pass a queueName or exclusiveQueue/);
       await client.stop();
@@ -153,8 +152,7 @@ suite('PulseConsumer', function() {
         routingKeyReference,
       }],
       exclusiveQueue: true,
-      handleMessage: () => client.recycle(),
-    });
+    }, () => client.recycle());
 
     let gotError = new Promise((resolve, reject) => {
       pq.on('error', err => {

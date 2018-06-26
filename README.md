@@ -217,12 +217,13 @@ let pc = await pulse.consume({
     routingKeyPattern,   // Routing key as string
     routingKeyReference, // Reference used to parse routing keys (optional)
   }, ..],
-  handleMessage,         // handler for incoming messages
-  queueName,             // Queue name; if omitted, set exclusiveQueue: true
-  exclusiveQueue,        // If true, use an exclusive queue (and lose messages on reconnect)
+  queueName,             // Queue name (without `queues/<namespace>/` prefix)
   prefetch,              // Max number of messages unacknowledged to hold (optional)
   maxLength,             // Maximum queue size, undefined for none
-}
+}, async ({payload, exchange, routingKey, redelivered, routes, routing}) => {
+  // handle message
+  ...
+});
 ```
 
 If `queueName` is specified, this will create a durable queue using a
@@ -253,8 +254,8 @@ restarted after stopping -- instead, create a new instance.  The `stop`
 method's Promise will not resolve until all message-handling has completed and
 the channel is closed.
 
-When a message is received, `handleMessage` is called (asynchronously) with
-a message of the form:
+When a message is received, the message handler (second positional argument) is
+called (asynchronously) with a message of the form:
 
 ```javascript
 {
