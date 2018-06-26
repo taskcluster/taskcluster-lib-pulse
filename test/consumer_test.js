@@ -116,7 +116,7 @@ suite('PulseConsumer', function() {
     assume(numbers).to.deeply.equal([0, 1, 2, 4, 5, 6, 7, 8, 9]);
   });
 
-  test('no queueuName without exclusiveQueue is an error', async function() {
+  test('no queueuName is an error', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
       connectionString: PULSE_CONNECTION_STRING,
@@ -128,45 +128,11 @@ suite('PulseConsumer', function() {
     try {
       await consume({client, bindings: []}, () => {});
     } catch (err) {
-      assume(err).to.match(/Must pass a queueName or exclusiveQueue/);
+      assume(err).to.match(/Must pass a queueName/);
       await client.stop();
       return;
     }
     assert(false, 'Did not get expected error');
 
-  });
-
-  test('exclusive PulseConsumer emits error on reconnect', async function() {
-    const monitor = await libMonitor({project: 'tests', mock: true});
-    const client = new Client({
-      connectionString: PULSE_CONNECTION_STRING,
-      retirementDelay: 50,
-      minReconnectionInterval: 20,
-      monitor,
-    });
-    const pq = await consume({
-      client,
-      bindings: [{
-        exchange: exchangeName,
-        routingKeyPattern: '#',
-        routingKeyReference,
-      }],
-      exclusiveQueue: true,
-    }, () => client.recycle());
-
-    let gotError = new Promise((resolve, reject) => {
-      pq.on('error', err => {
-        try {
-          assume(err.code).to.equal('ExclusiveQueueDisconneted');
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
-
-    await publishMessages();
-    await gotError;
-    await client.stop();
   });
 });

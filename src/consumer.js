@@ -8,7 +8,7 @@ const slugid = require('slugid');
  * queue, invoking a callback for each message.
  */
 class PulseConsumer extends events.EventEmitter {
-  constructor({client, bindings, queueName, exclusiveQueue, ...options}, handleMessage) {
+  constructor({client, bindings, queueName, ...options}, handleMessage) {
     super();
 
     assert(handleMessage, 'Must provide a message handler function');
@@ -18,8 +18,7 @@ class PulseConsumer extends events.EventEmitter {
     this.handleMessage = handleMessage;
     this.options = {prefetch: 5, ...options};
 
-    assert(queueName || exclusiveQueue, 'Must pass a queueName or exclusiveQueue');
-    this.exclusiveQueue = exclusiveQueue;
+    assert(queueName, 'Must pass a queueName');
     this.queueName = queueName;
 
     this._handleConnection = this._handleConnection.bind(this);
@@ -97,13 +96,11 @@ class PulseConsumer extends events.EventEmitter {
   }
 
   async _createAndBindQueue(channel) {
-    const queueName = this.client.fullObjectName(
-      'queue',
-      this.queueName || `exclusive/${slugid.v4()}`);
+    const queueName = this.client.fullObjectName('queue', this.queueName);
     await channel.assertQueue(queueName, {
-      exclusive: this.exclusiveQueue,
-      durable: !this.exclusiveQueue,
-      autoDelete: this.exclusiveQueue,
+      exclusive: false,
+      durable: true,
+      autoDelete: false,
       maxLength: this.options.maxLength,
     });
 
@@ -174,18 +171,6 @@ class PulseConsumer extends events.EventEmitter {
       // when retirement of this connection begins, stop consuming on this
       // channel and close the channel as soon sa all messages are handled.
       conn.on('retiring', () => this._shutdown());
-
-      // ..and if the queue is exclusive, emit an error when we retire and the
-      // connection is still running
-      if (this.exclusiveQueue) {
-        conn.on('retiring', () => {
-          if (this.client.running) {
-            const err = new Error('Exclusive queue disconnected; messages may be lost!');
-            err.code = 'ExclusiveQueueDisconneted';
-            this.emit('error', err);
-          }
-        });
-      }
     } catch (err) {
       this.client.monitor.reportError(err);
       conn.failed();

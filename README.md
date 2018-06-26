@@ -203,8 +203,9 @@ client.on('connected', async (conn) => {
 
 # PulseConsumer
 
-A PulseConsumer declares a queue and listens for messages on that
-queue, invoking a callback for each message.
+A PulseConsumer declares a queue and listens for messages on that queue,
+invoking a callback for each message. Note that this does not support ephemeral
+(auto-delete / exclusive) queues.
 
 Construct a PulseConsumer with the async `consume` function:
 
@@ -228,16 +229,7 @@ let pc = await pulse.consume({
 
 If `queueName` is specified, this will create a durable queue using a
 pulse-compatible queue name based on `queueName` (prefixed with
-`queue/<namespace>`).  If no `queueName` is given, `exclusiveQueue` must be
-true.
-
-If `exclusiveQueue` is true, then the resulting queue will be defined as
-exclusive and auto-delete. *WARNING* such a queue will be deleted when the
-connection fails, and connections fail regularly in production circumstances.
-When using an exclusive queue, PulseConsumer will emit an `error` event on each
-reconnection, with `err.code === 'ExclusiveQueueDisconneted'`. You may choose
-to handle this error (understanding that messages may be lost) or let it crash
-the process.
+`queue/<namespace>`).
 
 If `routingKeyReference` is provided for the exchange from which messages
 arrive, then the listener will parse the routing key and make it available as a
