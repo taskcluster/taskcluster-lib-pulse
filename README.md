@@ -4,13 +4,17 @@ Library for interacting with Pulse and Taskcluster-Pulse.  See [the
 docs](https://docs.taskcluster.net/manual/design/apis/pulse) for more
 information on Pulse.
 
+This library is designed for use in Taskcluster services, both for producing
+and consuming pulse messages.
+
 # Usage
 
 This library defines a Client along with several classes and functions that
 base their functionality on a Client.  The Client represents an association
 with a Pulse service, automatically reconnecting as necessary.
 
-The higher-level components are:
+It also provides higher-level components with simplified APIs for common
+applications. The higher-level components are:
 
 * [PulseConsumer](#PulseConsumer)
 
@@ -26,6 +30,7 @@ const pulse = require('taskcluster-lib-pulse');
 
 const client = new pulse.Client({
   connectionString: 'amqps://...',
+  monitor: .., // taskcluster-lib-monitor instance
 });
 // or
 const client = new pulse.Client({
@@ -33,6 +38,7 @@ const client = new pulse.Client({
   password: 'sekrit',
   hostname: 'pulse.mycompany.com',
   vhost: '/',
+  monitor: ..,
 });
 ```
 
@@ -89,23 +95,22 @@ if (client.activeConnection) {
 
 ## Manipulating AMQP Objects
 
-If you have a one-off task that requires a connection, such as declaring an
-exchange,
-
-use `client.withChannel`, which will wait for a connection if necessary, then
-run your function with an amqplib channel or confirmChannel. If the function
-fails, it is not automatically retried, but the channel is closed.
+If you have a one-off task that requires a channel, such as declaring an
+exchange, use `client.withChannel`, which will wait for a connection if
+necessary, then run your asynchronous function with an amqplib channel or
+confirmChannel. If the function fails, it is not automatically retried, but the
+channel is closed.
 
 ```javascript
-await client.withChannel(channel => { .. }, {confirmChannel: true});
-await client.withChannel(channel => { .. }, {confirmChannel: false});
+await client.withChannel(async channel => { .. }, {confirmChannel: true});
+await client.withChannel(async channel => { .. }, {confirmChannel: false});
 ```
 
 There is also a more general `withConnection` which returns the `Connection`
 instance without creating a channel.
 
 ```javascript
-await client.withConnection(conn => { .. });
+await client.withConnection(async conn => { .. });
 ```
 
 The most common use case for these functions is to declare or delete objects on
@@ -113,13 +118,19 @@ the AMQP server. For example:
 
 ```javascript
 await client.withChannel(async chan => {
-  const exchangeName = client.objectName('exchange', 'notable-things');
+  const exchangeName = client.fullObjectName('exchange', 'notable-things');
   await chan.assertExchange(exchangeName, 'topic');
 });
 ```
 
-Note that this uses the `objectName` method to generate an exchange name
-compatible with the pulse access control model.
+## Object Names
+
+Note that the example above uses the `fullObjectName` method. This method will
+generate an exchange name compatible with the pulse access control model, in
+this case `exchanges/<namespace>/notable-things`.
+
+This method is useful for translating unqualified names like `queueName` to the
+fully qualified names required when working directly with amqplib.
 
 ## Reconnection
 
@@ -145,7 +156,7 @@ The `retiring` event from the `Connection` will be followed by a
 
 ## Shutdown
 
-Call the async `Client.stop` method to shut the whole thing down. This will
+Call the async `Client.stop()` method to shut the whole thing down. This will
 wait until all existing `Connection` instances are finished their retirement.
 
 ## Examples
@@ -160,6 +171,8 @@ is finished.
 The whole thing is wrapped in a try/catch so that any errors in connection
 setup are treated as a connection failure.
 
+**NOTE**: the `PulseConsumer` class implements a full-featured consumer; this
+code is provided merely as an example of Client usage.
 
 ```javascript
 client.on('connected', async (conn) => {
@@ -191,12 +204,13 @@ client.on('connected', async (conn) => {
 # PulseConsumer
 
 A PulseConsumer declares a queue and listens for messages on that
-queue, invoking a callback for each messages.
+queue, invoking a callback for each message.
 
 Construct a PulseConsumer with the async `consume` function:
 
 ```javascript
-let pq = await pulse.consume({
+const pulse = require('taskcluster-lib-pulse');
+let pc = await pulse.consume({
   client,                // Client object for connecting to the server
   bindings: [{           // exchange/routingKey patterns to bind to
     exchange,            // Exchange to bind
@@ -234,8 +248,10 @@ promise has resolved, the queue exists and all bindings are in place.
 At this time, it is safe to initiate any actions that might generate messages
 you wish to receive.
 
-Call `pq.stop()` to stop consuming messages.  A PulseConsumer cannot be restarted
-after stopping -- instead, create a new instance.
+Call `await pc.stop()` to stop consuming messages.  A PulseConsumer cannot be
+restarted after stopping -- instead, create a new instance.  The `stop`
+method's Promise will not resolve until all message-handling has completed and
+the channel is closed.
 
 When a message is received, `handleMessage` is called (asynchronously) with
 a message of the form:
@@ -253,8 +269,6 @@ a message of the form:
 ```
 
 If the handler fails, the message will be re-queued and re-tried once.
-
-Listening starts immediately, or when the client starts.
 
 ## Routing Key Reference
 
