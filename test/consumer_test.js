@@ -6,7 +6,7 @@ const libMonitor = require('taskcluster-lib-monitor');
 
 const PULSE_CONNECTION_STRING = process.env.PULSE_CONNECTION_STRING;
 
-suite('PulseQueue', function() {
+suite('PulseConsumer', function() {
   // use a unique name for each test run, just to ensure nothing interferes
   const unique = new Date().getTime().toString();
   const exchangeName = `exchanges/test/${unique}`;
@@ -82,7 +82,7 @@ suite('PulseQueue', function() {
             }
             got.push(message);
             if (got.length === 9) {
-              // stop the PulseQueue first, to exercise that code
+              // stop the PulseConsumer first, to exercise that code
               // (this isn't how pq.stop would normally be called!)
               pq.stop().then(resolve, reject);
             }
@@ -137,7 +137,7 @@ suite('PulseQueue', function() {
 
   });
 
-  test('exclusive PulseQueue emits error on reconnect', async function() {
+  test('exclusive PulseConsumer emits error on reconnect', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
       connectionString: PULSE_CONNECTION_STRING,

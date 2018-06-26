@@ -12,7 +12,7 @@ with a Pulse service, automatically reconnecting as necessary.
 
 The higher-level components are:
 
-* [PulseQueue](#PulseQueue)
+* [PulseConsumer](#PulseConsumer)
 
 If you are using one of the higher-level components, then the details of
 interacting with a Client are not important -- just construct one and move on.
@@ -188,12 +188,12 @@ client.on('connected', async (conn) => {
 });
 ```
 
-# PulseQueue
+# PulseConsumer
 
-A PulseQueue declares a queue and listens for messages on that
+A PulseConsumer declares a queue and listens for messages on that
 queue, invoking a callback for each messages.
 
-Construct a PulseQueue with the async `consume` function:
+Construct a PulseConsumer with the async `consume` function:
 
 ```javascript
 let pq = await pulse.consume({
@@ -219,7 +219,7 @@ true.
 If `exclusiveQueue` is true, then the resulting queue will be defined as
 exclusive and auto-delete. *WARNING* such a queue will be deleted when the
 connection fails, and connections fail regularly in production circumstances.
-When using an exclusive queue, PulseQueue will emit an `error` event on each
+When using an exclusive queue, PulseConsumer will emit an `error` event on each
 reconnection, with `err.code === 'ExclusiveQueueDisconneted'`. You may choose
 to handle this error (understanding that messages may be lost) or let it crash
 the process.
@@ -234,7 +234,7 @@ promise has resolved, the queue exists and all bindings are in place.
 At this time, it is safe to initiate any actions that might generate messages
 you wish to receive.
 
-Call `pq.stop()` to stop consuming messages.  A PulseQueue cannot be restarted
+Call `pq.stop()` to stop consuming messages.  A PulseConsumer cannot be restarted
 after stopping -- instead, create a new instance.
 
 When a message is received, `handleMessage` is called (asynchronously) with
@@ -284,7 +284,7 @@ routingKeyPattern matched a particular message.
 
 In some cases, it is necessary to modify the bindings for a queue while it is
 still consuming.  Use `queue.withChannel` (above) for this purpose. In this
-case, it is simplest to provide an empty `bindings: []` to the PulseQueue
+case, it is simplest to provide an empty `bindings: []` to the PulseConsumer
 constructor and manage bindings entirely via `withChannel`. Note that with this
 arrangement, routing key reference is not supported.
 

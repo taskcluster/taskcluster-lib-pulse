@@ -4,10 +4,10 @@ const assert = require('assert');
 const slugid = require('slugid');
 
 /**
- * A PulseQueue declares a queue and listens for messages on that
+ * A PulseConsumer declares a queue and listens for messages on that
  * queue, invoking a callback for each message.
  */
-class PulseQueue extends events.EventEmitter {
+class PulseConsumer extends events.EventEmitter {
   constructor({client, bindings, handleMessage, queueName, exclusiveQueue, ...options}) {
     super();
 
@@ -257,7 +257,7 @@ class PulseQueue extends events.EventEmitter {
 }
 
 const consume = async (options) => {
-  const pq = new PulseQueue(options);
+  const pq = new PulseConsumer(options);
   await pq._start();
   return pq;
 };
