@@ -93,11 +93,10 @@ class Client extends events.EventEmitter {
     this._minReconnectionInterval = minReconnectionInterval || 15 * 1000;
     this.running = false;
     this.connections = [];
-    this.connectionCounter = 0;
     this.lastConnectionTime = 0;
 
     this.id = ++clientCounter;
-    this.debug = debug(`taskcluster-lib-pulse:client:${this.id}`);
+    this.debug = debug(`taskcluster-lib-pulse.client-${this.id}`);
 
     this.debug('starting');
     this.running = true;
@@ -138,7 +137,7 @@ class Client extends events.EventEmitter {
     }
 
     if (this.running) {
-      const newConn = new Connection(this, ++this.connectionCounter);
+      const newConn = new Connection(this);
 
       // don't actually start connecting until at lesat minReconnectionInterval has passed
       const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
@@ -227,6 +226,8 @@ class Client extends events.EventEmitter {
 
 exports.Client = Client;
 
+let nextConnectionId = 1;
+
 /**
  * A single connection to a pulse server.  This is a thin wrapper around a raw
  * AMQP connection, instrumented to inform the parent Client of failures
@@ -263,14 +264,14 @@ exports.Client = Client;
  *
  */
 class Connection extends events.EventEmitter {
-  constructor(client, id) {
+  constructor(client) {
     super();
 
     this.client = client;
-    this.id = id;
+    this.id = nextConnectionId++;
     this.amqp = null;
 
-    this.debug = debug(`taskcluster-lib-pulse:connection:${client.id}.${id}`);
+    this.debug = debug(`taskcluster-lib-pulse.conn-${this.id}`);
 
     this.debug('waiting');
     this.state = 'waiting';
