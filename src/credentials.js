@@ -56,7 +56,7 @@ const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact})
       contact,
     });
     const connectionString = res.connectionString;
-    const recycleAfter = res.reclaimAt-taskcluster.fromNow('0 minutes');
+    const recycleAfter = res.reclaimAt - taskcluster.fromNow('0 minutes');
     return {connectionString, recycleAfter};
   };
 };
