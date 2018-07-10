@@ -3,39 +3,7 @@ const debug = require('debug');
 const amqplib = require('amqplib');
 const assert = require('assert');
 const {URL} = require('url');
-const taskcluster = require('taskcluster-client');
-
 var clientCounter = 0;
-
-/**
- * Build Pulse ConnectionString, from options on the form:
- * {
- *   username:          // Pulse username
- *   password:          // Pulse password
- *   hostname:          // Hostname to use
- * }
- */
-const buildConnectionString = function({username, password, hostname, vhost}) {
-  assert(username, 'options.username is required');
-  assert(password, 'options.password is required');
-  assert(hostname, 'options.hostname is required');
-  assert(vhost, 'options.vhost is required');
-
-  // Construct connection string
-  return [
-    'amqps://',         // Ensure that we're using SSL
-    encodeURI(username),
-    ':',
-    encodeURI(password),
-    '@',
-    hostname,
-    ':',
-    5671,                // Port for SSL
-    '/',
-    encodeURIComponent(vhost),
-  ].join('');
-};
-exports.buildConnectionString = buildConnectionString;
 
 /**
  * An object to create connections to a pulse server.  This class will
@@ -54,11 +22,7 @@ exports.buildConnectionString = buildConnectionString;
  * publish operations or message consumptions to complete.
  *
  * Options:
- * * connectionString
- * * username
- * * password
- * * hostname
- * * vhost
+ * * credentials (async function )
  * * recycleInterval (ms; default 1h)
  * * retirementDelay (ms; default 30s)
  * * minReconnectionInterval (ms; default 15s)
@@ -67,44 +31,13 @@ exports.buildConnectionString = buildConnectionString;
  * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
-  constructor({username, password, hostname, vhost, connectionString, recycleInterval,
-    retirementDelay, minReconnectionInterval, monitor, tcCredentials, rootUrl, contact}) {
+  constructor({recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials}) {
     super();
-
-    if (connectionString) {
-      assert(!username, 'Can\'t use `username` along with `connectionString`');
-      assert(!password, 'Can\'t use `password` along with `connectionString`');
-      assert(!hostname, 'Can\'t use `hostname` along with `connectionString`');
-      assert(!vhost, 'Can\'t use `vhost` along with `connectionString`');
-      assert(!tcCredentials, 'Can\'t use `tcCredentials` along with `connectionString`');
-      assert(!rootUrl, 'Can\'t use `rootUrl` along with `connectionString`');
-      this.connectionString = connectionString;
-
-      // extract the username as namespace
-      const connURL = new URL(connectionString);
-      this.namespace = decodeURI(connURL.username);
-    } else if (tcCredentials && rootUrl) {
-      assert(username, 'options.username is required');
-      assert(!password, 'Can\'t use `password` along with `tcCredentials`');
-      assert(!hostname, 'Can\'t use `hostname` along with `tcCredentials`');
-      assert(!vhost, 'Can\'t use `vhost` along with `tcCredentials`');
-      this.pulse = taskcluster.Pulse({
-        tcCredentials,
-        rootUrl,
-      });
-      this.namespace = username;
-      this.contact = contact;
-      const pulsecredentials = pulseCredentials();
-      this.connectionString = pulsecredentials.connectionString;
-      this.namespace = pulsecredentials.namespace;
-      this.reclaimAt = pulsecredentials.reclaimAt;
-    } else {
-      this.connectionString = buildConnectionString({username, password, hostname, vhost});
-      this.namespace = username;
-    }
 
     assert(monitor, 'monitor is required');
     this.monitor = monitor;
+
+    this.credentials = credentials;
 
     this._recycleInterval = recycleInterval || 3600 * 1000;
     this._retirementDelay = retirementDelay || 30 * 1000;
@@ -123,25 +56,6 @@ class Client extends events.EventEmitter {
     this._interval = setInterval(
       () => this.recycle(),
       this._recycleInterval);
-    
-    if (this.pulse) {
-      this._reclaiminterval = setTimeout( 
-        callreclaim = () => {
-          const pulsecredentials = pulseCredentials();
-          this.connectionString = pulsecredentials.connectionString;
-          this.namespace = pulsecredentials.namespace;
-          this.reclaimAt = pulsecredentials.reclaimAt;
-          this.recycle();
-          // Refresh the normal recycle interval since a new connection is established by other means
-          clearInterval(this._interval);
-          this._interval = setInterval(
-            () => this.recycle(),
-            this._recycleInterval);
-          setTimeout(callreclaim, this.reclaimAt-taskcluster.fromNow('0 minutes'));
-        },
-        this.reclaimAt - taskcluster.fromNow('0 minutes')
-      );
-    }
   }
 
   async stop() {
@@ -203,16 +117,6 @@ class Client extends events.EventEmitter {
     assert(kind, 'kind is required');
     assert(name, 'name is required');
     return `${kind}/${this.namespace}/${name}`;
-  }
-
-  /**
-   * Get pulse credentials using taskcluster credentials
-   */
-  async pulseCredentials() {
-    return await this.pulse.claimNamespace(this.namespace, {
-      expires: taskcluster.fromNow('1 day'),
-      contact: this.contact,
-    });
   }
 
   /**
@@ -359,7 +263,23 @@ class Connection extends events.EventEmitter {
     this.debug('connecting');
     this.state = 'connecting';
 
-    const amqp = await amqplib.connect(this.client.connectionString, {
+    if (!this.connectionString) {
+      await setConnStringNamespace();
+      if (this.client._recycleAfter) {
+        setTimeout(callreclaim = async () => {
+          await setConnStringNamespace(this.client);
+          // Refresh the normal recycle interval since a new connection is established by other means
+          clearInterval(this.client._interval);
+          this.client._interval = null;
+          this.client._interval = setInterval(
+            () => this.client.recycle(),
+            interval);
+          setTimeout(callreclaim, this.client.recycleAfter);
+        }, this.client._recycleAfter);
+      }
+    }
+
+    const amqp = await amqplib.connect(this.connectionString, {
       heartbeat: 120,
       noDelay: true,
       timeout: 30 * 1000,
@@ -426,6 +346,20 @@ class Connection extends events.EventEmitter {
       this.state = 'finished';
       this.emit('finished');
     }, this.client._retirementDelay);
+  }
+
+  /**
+   * Using credentials set value of connectionstring of Connection object, namespace of client
+   * and _recycleAfter of client.
+   * recycleAfter is the recycle interval which may be suggested by the service from which 
+   * credentials are claimed
+   */
+  async setConnStringNamespace() {
+    const credentials = await this.client.credentials();
+    this.connectionString = credentials.connectionString;
+    const connURL = new URL(connectionString);
+    this.client.namespace = decodeURI(connURL.username);
+    this.client._recycleAfter = credentials.recycleAfter;
   }
 }
 
