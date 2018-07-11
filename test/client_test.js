@@ -93,6 +93,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
     client.on('connected', () => { gotConnection = true; });
     await client.stop();
@@ -105,6 +106,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
     assume(client.activeConnection).to.equal(undefined);
     await new Promise((resolve, reject) => {
@@ -131,6 +133,7 @@ const connectionTests = connectionString => {
         recycleInterval: 10,
         retirementDelay: 50,
         monitor,
+        namespace: 'me',
       });
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -154,6 +157,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 10,
       monitor,
+      namespace: 'me',
     });
 
     try {
@@ -174,6 +178,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
 
     await new Promise((resolve, reject) => {
@@ -189,6 +194,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
 
     await new Promise((resolve, reject) => {
@@ -207,6 +213,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
 
     let gotConnection = false;
@@ -232,6 +239,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
 
     const queueName = client.fullObjectName('queue', slugid.v4());
@@ -269,6 +277,7 @@ const connectionTests = connectionString => {
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'me',
     });
 
     let failureCount = 0;

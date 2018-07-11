@@ -31,12 +31,14 @@ var clientCounter = 0;
  * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
-  constructor({recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials}) {
+  constructor({namespace, recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials}) {
     super();
 
     assert(monitor, 'monitor is required');
     this.monitor = monitor;
 
+    assert(namespace, 'namespace is required');
+    this.namespace = namespace;
     this.credentials = credentials;
 
     this._recycleInterval = recycleInterval || 3600 * 1000;
