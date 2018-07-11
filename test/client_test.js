@@ -1,5 +1,5 @@
 const {Client} = require('../src');
-const {buildConnectionString} = require('../src/client');
+const {pulseCredentials, connectionStringCredentials} = require('../src/credentials');
 const amqplib = require('amqplib');
 const assert = require('assert');
 const assume = require('assume');
@@ -15,36 +15,40 @@ if (!PULSE_CONNECTION_STRING) {
 }
 
 suite('buildConnectionString', function() {
-  test('missing arguments are an error', function() {
-    assume(() => buildConnectionString({password: 'pw', hostname: 'h', vhost: 'v'}))
+  test('missing arguments are an error', async function() {
+    assume(() => pulseCredentials({password: 'pw', hostname: 'h', vhost: 'v'}))
       .throws(/username/);
-    assume(() => buildConnectionString({username: 'me', hostname: 'h', vhost: 'v'}))
+    assume(() => pulseCredentials({username: 'me', hostname: 'h', vhost: 'v'}))
       .throws(/password/);
-    assume(() => buildConnectionString({username: 'me', password: 'pw', vhost: 'v'}))
+    assume(() => pulseCredentials({username: 'me', password: 'pw', vhost: 'v'}))
       .throws(/hostname/);
-    assume(() => buildConnectionString({username: 'me', password: 'pw', hostname: 'v'}))
+    assume(() => pulseCredentials({username: 'me', password: 'pw', hostname: 'v'}))
       .throws(/vhost/);
   });
 
-  test('builds a connection string with given host', function() {
+  test('builds a connection string with given host', async function() {
+    const credentials = await pulseCredentials({
+      username: 'me',
+      password: 'letmein',
+      hostname: 'pulse.abc.com',
+      vhost: '/',
+    })();
+
     assert.equal(
-      buildConnectionString({
-        username: 'me',
-        password: 'letmein',
-        hostname: 'pulse.abc.com',
-        vhost: '/',
-      }),
+      credentials.connectionString,
       'amqps://me:letmein@pulse.abc.com:5671/%2F');
   });
 
-  test('builds a connection string with urlencoded values', function() {
+  test('builds a connection string with urlencoded values', async function() {
+    const credentials = await pulseCredentials({
+      username: 'ali-escaper:/@\\|()<>&',
+      password: 'bobby-tables:/@\\|()<>&',
+      hostname: 'pulse.abc.com',
+      vhost: '/',
+    })();
+
     assert.equal(
-      buildConnectionString({
-        username: 'ali-escaper:/@\\|()<>&',
-        password: 'bobby-tables:/@\\|()<>&',
-        hostname: 'pulse.abc.com',
-        vhost: '/',
-      }),
+      credentials.connectionString,
       'amqps://ali-escaper:/@%5C%7C()%3C%3E&:bobby-tables:/@%5C%7C()%3C%3E&@pulse.abc.com:5671/%2F');
   });
 });
@@ -85,7 +89,7 @@ const connectionTests = connectionString => {
   test('start and immediately stop', async function() {
     let gotConnection = false;
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -97,7 +101,7 @@ const connectionTests = connectionString => {
 
   test('activeConnection', async function() {
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -123,7 +127,7 @@ const connectionTests = connectionString => {
     Client.prototype.recycle = () => { recycles++; };
     try {
       const client = new Client({
-        connectionString,
+        credentials: connectionStringCredentials(connectionString),
         recycleInterval: 10,
         retirementDelay: 50,
         monitor,
@@ -146,7 +150,7 @@ const connectionTests = connectionString => {
     };
 
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 10,
       monitor,
@@ -166,7 +170,7 @@ const connectionTests = connectionString => {
 
   test('start and stop after connection is established', async function() {
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -181,7 +185,7 @@ const connectionTests = connectionString => {
 
   test('start, fail, and then stop', async function() {
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -199,7 +203,7 @@ const connectionTests = connectionString => {
 
   test('withConnection', async function() {
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -224,7 +228,7 @@ const connectionTests = connectionString => {
 
   test('withChannel', async function() {
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -261,7 +265,7 @@ const connectionTests = connectionString => {
 
   test('consumer (with failures)', async function() {
     const client = new Client({
-      connectionString,
+      credentials: connectionStringCredentials(connectionString),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -323,15 +327,6 @@ const connectionTests = connectionString => {
 
 suite('Client', function() {
   suite('constructor', async function() {
-    const monitor = await libMonitor({project: 'tests', mock: true});
-    test('rejects connectionString *and* username', function() {
-      assume(() => new Client({username: 'me', connectionString: 'amqps://..', monitor}))
-        .throws(/along with/);
-    });
-    test('requires either connectionString *or* username', function() {
-      assume(() => new Client({monitor}))
-        .throws(/is required/);
-    });
   });
 
   suite('with RabbitMQ', function() {
