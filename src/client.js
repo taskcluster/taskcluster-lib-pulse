@@ -264,18 +264,24 @@ class Connection extends events.EventEmitter {
     this.state = 'connecting';
 
     if (!this.connectionString) {
-      await setConnStringNamespace();
-      if (this.client._recycleAfter) {
-        setTimeout(callreclaim = async () => {
-          await setConnStringNamespace(this.client);
-          // Refresh the normal recycle interval since a new connection is established by other means
-          clearInterval(this.client._interval);
-          this.client._interval = null;
-          this.client._interval = setInterval(
-            () => this.client.recycle(),
-            interval);
-          setTimeout(callreclaim, this.client.recycleAfter);
-        }, this.client._recycleAfter);
+      try {
+        await setConnStringNamespace();
+        if (this.client._recycleAfter) {
+          setTimeout(callreclaim = async () => {
+            await setConnStringNamespace();
+            // Refresh the normal recycle interval since a new connection is established by other means
+            clearInterval(this.client._interval);
+            this.client._interval = null;
+            this.client._interval = setInterval(
+              () => this.client.recycle(),
+              interval);
+            setTimeout(callreclaim, this.client._recycleAfter);
+          }, this.client._recycleAfter);
+        }
+      } catch (err) {
+        this.debug(`Error while connecting : ${err}`);
+        this.failed();
+        return;
       }
     }
 
