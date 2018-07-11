@@ -40,14 +40,13 @@ class Client extends events.EventEmitter {
     assert(namespace, 'namespace is required');
     this.namespace = namespace;
     this.credentials = credentials;
-
     this._recycleInterval = recycleInterval || 3600 * 1000;
     this._retirementDelay = retirementDelay || 30 * 1000;
     this._minReconnectionInterval = minReconnectionInterval || 15 * 1000;
     this.running = false;
     this.connections = [];
     this.lastConnectionTime = 0;
-
+    this._recycleAfter = 0;
     this.id = ++clientCounter;
     this.debug = debug(`taskcluster-lib-pulse.client-${this.id}`);
 
@@ -190,6 +189,17 @@ class Client extends events.EventEmitter {
       }
     });
   }
+
+  /**
+   * Using credentials return connectionstring  and set _recycleAfter of client.
+   * recycleAfter is the recycle interval which may be suggested by the service from which 
+   * credentials are claimed
+   */
+  async getConnectionString() {
+    const credentials = await this.credentials();
+    this._recycleAfter = credentials.recycleAfter;
+    return credentials.connectionString;
+  }
 }
 
 exports.Client = Client;
@@ -255,6 +265,7 @@ class Connection extends events.EventEmitter {
 
     this.debug('waiting');
     this.state = 'waiting';
+    this.connectionString = '';
   }
 
   async connect() {
@@ -267,16 +278,16 @@ class Connection extends events.EventEmitter {
 
     if (!this.connectionString) {
       try {
-        await setConnStringNamespace();
+        this.connectionString = await this.client.getConnectionString();
         if (this.client._recycleAfter) {
           setTimeout(callreclaim = async () => {
-            await setConnStringNamespace();
+            this.connectionString = await this.client.getConnectionString();
             // Refresh the normal recycle interval since a new connection is established by other means
             clearInterval(this.client._interval);
             this.client._interval = null;
             this.client._interval = setInterval(
               () => this.client.recycle(), 
-              this._recycleInterval);
+              this.client._recycleInterval);
             setTimeout(callreclaim, this.client._recycleAfter);
           }, this.client._recycleAfter);
         }
@@ -356,19 +367,6 @@ class Connection extends events.EventEmitter {
     }, this.client._retirementDelay);
   }
 
-  /**
-   * Using credentials set value of connectionstring of Connection object, namespace of client
-   * and _recycleAfter of client.
-   * recycleAfter is the recycle interval which may be suggested by the service from which 
-   * credentials are claimed
-   */
-  async setConnStringNamespace() {
-    const credentials = await this.client.credentials();
-    this.connectionString = credentials.connectionString;
-    const connURL = new URL(connectionString);
-    this.client.namespace = decodeURI(connURL.username);
-    this.client._recycleAfter = credentials.recycleAfter;
-  }
 }
 
 exports.Connection = Connection;
