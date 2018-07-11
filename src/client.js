@@ -273,8 +273,8 @@ class Connection extends events.EventEmitter {
             clearInterval(this.client._interval);
             this.client._interval = null;
             this.client._interval = setInterval(
-              () => this.client.recycle(),
-              interval);
+              () => this.client.recycle(), 
+              this._recycleInterval);
             setTimeout(callreclaim, this.client._recycleAfter);
           }, this.client._recycleAfter);
         }
