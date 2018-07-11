@@ -1,4 +1,4 @@
-const {FakeClient, Client, consume} = require('../src');
+const {Client, consume, connectionStringCredentials} = require('../src');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
@@ -49,10 +49,11 @@ suite('PulseConsumer', function() {
   test('consume messages', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
-      connectionString: PULSE_CONNECTION_STRING,
+      credentials: connectionStringCredentials(PULSE_CONNECTION_STRING),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'guest',
     });
     const got = [];
 
@@ -119,10 +120,11 @@ suite('PulseConsumer', function() {
   test('no queueuName is an error', async function() {
     const monitor = await libMonitor({project: 'tests', mock: true});
     const client = new Client({
-      connectionString: PULSE_CONNECTION_STRING,
+      credentials: connectionStringCredentials(PULSE_CONNECTION_STRING),
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
+      namespace: 'guest',
     });
 
     try {
