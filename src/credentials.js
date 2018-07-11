@@ -17,7 +17,7 @@ const pulseCredentials = ({username, password, hostname, vhost}) => {
   
   // Construct connection string
   return async () => {
-    {
+    return {
       connectionString: [
         'amqps://',         // Ensure that we're using SSL
         encodeURI(username),
@@ -29,16 +29,20 @@ const pulseCredentials = ({username, password, hostname, vhost}) => {
         5671,                // Port for SSL
         '/',
         encodeURIComponent(vhost),
-      ].join('');
-    }
+      ].join(''),
+    };
   };
 };
+
+exports.pulseCredentials = pulseCredentials;
 
 const connectionStringCredentials = (connectionString) => {
   return async () => {
     return {connectionString};
   };
 };
+
+exports.connectionStringCredentials = connectionStringCredentials;
 
 /**
    * Get pulse credentials using taskcluster credentials and build connection string 
@@ -61,8 +65,4 @@ const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact})
   };
 };
 
-exports = {
-  pulseCredentials,
-  connectionStringCredentials,
-  claimedCredentials,
-};
+exports.claimedCredentials = claimedCredentials;
