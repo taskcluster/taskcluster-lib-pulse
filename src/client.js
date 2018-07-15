@@ -163,6 +163,8 @@ class Client extends events.EventEmitter {
    * directly, for example to modify the bindings of an active queue.
    */
   fullObjectName(kind, name) {
+    assert(kind, 'kind is required');
+    assert(name, 'name is required');
     return `${kind}/${this.namespace}/${name}`;
   }
 
