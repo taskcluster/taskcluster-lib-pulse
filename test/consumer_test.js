@@ -1,4 +1,4 @@
-const {Client, consume, connectionStringCredentials} = require('../src');
+const {FakeClient, Client, consume, connectionStringCredentials} = require('../src');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
