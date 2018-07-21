@@ -1,5 +1,4 @@
-const {Client} = require('../src');
-const {pulseCredentials, connectionStringCredentials} = require('../src/credentials');
+const {Client, pulseCredentials, connectionStringCredentials, mockclaimedCredentials} = require('../src');
 const amqplib = require('amqplib');
 const assert = require('assert');
 const assume = require('assume');
@@ -86,10 +85,12 @@ const connectionTests = connectionString => {
     debug('publish complete');
   };
 
+  const credentials = connectionStringCredentials(PULSE_CONNECTION_STRING);
+
   test('start and immediately stop', async function() {
     let gotConnection = false;
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -102,7 +103,7 @@ const connectionTests = connectionString => {
 
   test('activeConnection', async function() {
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -129,7 +130,7 @@ const connectionTests = connectionString => {
     Client.prototype.recycle = () => { recycles++; };
     try {
       const client = new Client({
-        credentials: connectionStringCredentials(connectionString),
+        credentials,
         recycleInterval: 10,
         retirementDelay: 50,
         monitor,
@@ -153,7 +154,7 @@ const connectionTests = connectionString => {
     };
 
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 10,
       monitor,
@@ -174,7 +175,7 @@ const connectionTests = connectionString => {
 
   test('start and stop after connection is established', async function() {
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -190,7 +191,7 @@ const connectionTests = connectionString => {
 
   test('start, fail, and then stop', async function() {
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -209,7 +210,7 @@ const connectionTests = connectionString => {
 
   test('withConnection', async function() {
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -235,7 +236,7 @@ const connectionTests = connectionString => {
 
   test('withChannel', async function() {
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -273,7 +274,7 @@ const connectionTests = connectionString => {
 
   test('consumer (with failures)', async function() {
     const client = new Client({
-      credentials: connectionStringCredentials(connectionString),
+      credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
@@ -335,9 +336,6 @@ const connectionTests = connectionString => {
 };
 
 suite('Client', function() {
-  suite('constructor', async function() {
-  });
-
   suite('with RabbitMQ', function() {
     suiteSetup(function() {
       if (!PULSE_CONNECTION_STRING) {
@@ -347,4 +345,41 @@ suite('Client', function() {
 
     connectionTests(PULSE_CONNECTION_STRING);
   });
+
+  suite('mockclaimedCredentials', function() {
+    let monitor;
+  
+    suiteSetup(async function() {
+      monitor = await libMonitor({project: 'tests', mock: true});
+    });
+    
+    test('reclaim', async function() {
+      let reclaims = 0, timerId;
+      const oldMethod = Client.prototype.callreclaim;
+
+      Client.prototype.callreclaim = () => {
+        setTimeout(reclaim = async () => {
+          reclaims++;
+          timerId = setTimeout(reclaim, 10);
+        }, 10);
+      };
+
+      try {
+        const client = new Client({
+          credentials: mockclaimedCredentials(PULSE_CONNECTION_STRING),
+          retirementDelay: 50,
+          minReconnectionInterval: 5,
+          recycleInterval: 20,
+          monitor,
+          namespace: 'guest',
+        });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        clearTimeout(timerId);
+        await client.stop();
+        assume(reclaims).is.between(5, 15);
+      } finally {
+        Client.prototype.callreclaim = oldMethod;
+      }
+    });
+  });  
 });

@@ -49,6 +49,10 @@ exports.connectionStringCredentials = connectionStringCredentials;
    * using taskcluster pulse service
 */
 const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact}) => {
+  assert(rootUrl, 'rootUrl is required');
+  assert(credentials, 'credentials is required');
+  assert(namespace, 'namespace is required');
+
   const pulse = taskcluster.Pulse({
     credentials,
     rootUrl,
@@ -66,3 +70,13 @@ const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact})
 };
 
 exports.claimedCredentials = claimedCredentials;
+
+const mockclaimedCredentials = (connectionString, recycleAfter) => {
+  recycleAfter = recycleAfter || 10;
+
+  return async () => {
+    return {connectionString, recycleAfter};
+  };
+};
+
+exports.mockclaimedCredentials = mockclaimedCredentials;

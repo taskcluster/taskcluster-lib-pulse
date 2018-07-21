@@ -1,6 +1,11 @@
 const {Client, FakeClient} = require('./client');
 const {consume} = require('./consumer');
-const {pulseCredentials, connectionStringCredentials, claimedCredentials} = require('./credentials');
+const {
+  pulseCredentials,
+  connectionStringCredentials,
+  claimedCredentials,
+  mockclaimedCredentials,
+} = require('./credentials');
 
 module.exports = {
   Client,
@@ -9,4 +14,5 @@ module.exports = {
   pulseCredentials,
   connectionStringCredentials,
   claimedCredentials,
+  mockclaimedCredentials,
 };
