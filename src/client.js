@@ -46,10 +46,9 @@ class Client extends events.EventEmitter {
     this.running = false;
     this.connections = [];
     this.lastConnectionTime = 0;
-    this._recycleAfter = 0;
     this.id = ++clientCounter;
     this.debug = debug(`taskcluster-lib-pulse.client-${this.id}`);
-
+  
     this.debug('starting');
     this.running = true;
     this.recycle();
@@ -63,7 +62,8 @@ class Client extends events.EventEmitter {
     assert(this.running, 'Not running');
     this.debug('stopping');
     this.running = false;
-
+  
+    clearTimeout(this._timeoutId);
     clearInterval(this._interval);
     this._interval = null;
 
@@ -190,16 +190,24 @@ class Client extends events.EventEmitter {
     });
   }
 
+  callreclaim() {
+    setTimeout(reclaim = async () => {
+      await this.setConnectionString().catch(err => {});
+      this._timeoutId = setTimeout(reclaim, this._recycleAfter);
+    }, this._recycleAfter);
+  }
+
   /**
    * Using credentials return connectionstring  and set _recycleAfter of client.
    * recycleAfter is the recycle interval which may be suggested by the service from which 
    * credentials are claimed
    */
-  async getConnectionString() {
+  async setConnectionString() {
     const credentials = await this.credentials();
     this._recycleAfter = credentials.recycleAfter;
-    return credentials.connectionString;
+    this.connectionString = credentials.connectionString;
   }
+
 }
 
 exports.Client = Client;
@@ -265,7 +273,6 @@ class Connection extends events.EventEmitter {
 
     this.debug('waiting');
     this.state = 'waiting';
-    this.connectionString = '';
   }
 
   async connect() {
@@ -276,20 +283,11 @@ class Connection extends events.EventEmitter {
     this.debug('connecting');
     this.state = 'connecting';
 
-    if (!this.connectionString) {
+    if (!this.client.connectionString) {
       try {
-        this.connectionString = await this.client.getConnectionString();
+        await this.client.setConnectionString();
         if (this.client._recycleAfter) {
-          setTimeout(callreclaim = async () => {
-            this.connectionString = await this.client.getConnectionString();
-            // Refresh the normal recycle interval since a new connection is established by other means
-            clearInterval(this.client._interval);
-            this.client._interval = null;
-            this.client._interval = setInterval(
-              () => this.client.recycle(), 
-              this.client._recycleInterval);
-            setTimeout(callreclaim, this.client._recycleAfter);
-          }, this.client._recycleAfter);
+          this.client.callreclaim();
         }
       } catch (err) {
         this.debug(`Error while connecting : ${err}`);
@@ -298,7 +296,7 @@ class Connection extends events.EventEmitter {
       }
     }
 
-    const amqp = await amqplib.connect(this.connectionString, {
+    const amqp = await amqplib.connect(this.client.connectionString, {
       heartbeat: 120,
       noDelay: true,
       timeout: 30 * 1000,
