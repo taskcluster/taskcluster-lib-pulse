@@ -333,6 +333,35 @@ const connectionTests = connectionString => {
       await client.stop();
     }
   });
+
+  test('reclaim', async function() {
+    let reclaims = 0, timerId;
+    const oldMethod = Client.prototype.callreclaim;
+
+    Client.prototype.callreclaim = () => {
+      setTimeout(reclaim = async () => {
+        reclaims++;
+        timerId = setTimeout(reclaim, 10);
+      }, 10);
+    };
+
+    try {
+      const client = new Client({
+        credentials: mockclaimedCredentials(connectionString),
+        retirementDelay: 50,
+        minReconnectionInterval: 5,
+        recycleInterval: 20,
+        monitor,
+        namespace: 'guest',
+      });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      clearTimeout(timerId);
+      await client.stop();
+      assume(reclaims).is.between(5, 15);
+    } finally {
+      Client.prototype.callreclaim = oldMethod;
+    }
+  });
 };
 
 suite('Client', function() {
@@ -345,41 +374,4 @@ suite('Client', function() {
 
     connectionTests(PULSE_CONNECTION_STRING);
   });
-
-  suite('mockclaimedCredentials', function() {
-    let monitor;
-  
-    suiteSetup(async function() {
-      monitor = await libMonitor({project: 'tests', mock: true});
-    });
-    
-    test('reclaim', async function() {
-      let reclaims = 0, timerId;
-      const oldMethod = Client.prototype.callreclaim;
-
-      Client.prototype.callreclaim = () => {
-        setTimeout(reclaim = async () => {
-          reclaims++;
-          timerId = setTimeout(reclaim, 10);
-        }, 10);
-      };
-
-      try {
-        const client = new Client({
-          credentials: mockclaimedCredentials(PULSE_CONNECTION_STRING),
-          retirementDelay: 50,
-          minReconnectionInterval: 5,
-          recycleInterval: 20,
-          monitor,
-          namespace: 'guest',
-        });
-        await new Promise(resolve => setTimeout(resolve, 100));
-        clearTimeout(timerId);
-        await client.stop();
-        assume(reclaims).is.between(5, 15);
-      } finally {
-        Client.prototype.callreclaim = oldMethod;
-      }
-    });
-  });  
 });
