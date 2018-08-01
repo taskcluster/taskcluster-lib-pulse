@@ -54,6 +54,7 @@ suite('consumer_test.js', function() {
         retirementDelay: 50,
         minReconnectionInterval: 20,
         monitor,
+        namespace: 'guest',
       });
       const got = [];
 
@@ -124,6 +125,7 @@ suite('consumer_test.js', function() {
         retirementDelay: 50,
         minReconnectionInterval: 20,
         monitor,
+        namespace: 'guest',
       });
 
       try {
