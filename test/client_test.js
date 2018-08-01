@@ -64,7 +64,7 @@ const connectionTests = connectionString => {
   let monitor;
 
   setup(async function() {
-    monitor = await libMonitor({project: 'tests', mock: true});
+    monitor = await libMonitor({projectName: 'tests', mock: true});
   });
 
   // publish a message to the exchange using just amqplib, declaring the

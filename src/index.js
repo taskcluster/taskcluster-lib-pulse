@@ -6,6 +6,7 @@ const {
   claimedCredentials,
   mockclaimedCredentials,
 } = require('./credentials');
+const {Exchanges} = require('./publisher');
 
 module.exports = {
   Client,
@@ -15,4 +16,5 @@ module.exports = {
   connectionStringCredentials,
   claimedCredentials,
   mockclaimedCredentials,
+  Exchanges,
 };
