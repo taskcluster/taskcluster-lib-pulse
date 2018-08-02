@@ -7,6 +7,7 @@ const taskcluster = require('taskcluster-client');
  *   username:          // Pulse username
  *   password:          // Pulse password
  *   hostname:          // Hostname to use
+ *   vhost   :          // vhost to use
  * }
  */
 const pulseCredentials = ({username, password, hostname, vhost}) => {
@@ -36,6 +37,9 @@ const pulseCredentials = ({username, password, hostname, vhost}) => {
 
 exports.pulseCredentials = pulseCredentials;
 
+/**
+  * Simply returns the same connectionstring send as a parameter,wrapped with an async function
+ */
 const connectionStringCredentials = (connectionString) => {
   return async () => {
     return {connectionString};
@@ -46,7 +50,8 @@ exports.connectionStringCredentials = connectionStringCredentials;
 
 /**
    * Get pulse credentials using taskcluster credentials and build connection string 
-   * using taskcluster pulse service
+   * using taskcluster pulse service.
+   * Further it caches the connection credentials with an expiry date of reclaimAt
 */
 const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact}) => {
   assert(rootUrl, 'rootUrl is required');
@@ -58,25 +63,36 @@ const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact})
     rootUrl,
   });
 
+  let connectionString, recycleAt;
+
   return async () => {
+    if (recycleAt && recycleAt - new Date() > 5) {
+      return {connectionString, recycleAt};
+    }
+
     const res = await pulse.claimNamespace(namespace, {
       expires,
       contact,
     });
-    const connectionString = res.connectionString;
-    const recycleAfter = res.reclaimAt - taskcluster.fromNow('0 minutes');
-    return {connectionString, recycleAfter};
+    connectionString = res.connectionString;
+    recycleAt = res.reclaimAt;
+    return {connectionString, recycleAt};
   };
 };
 
 exports.claimedCredentials = claimedCredentials;
 
-const mockclaimedCredentials = (connectionString, recycleAfter) => {
-  recycleAfter = recycleAfter || 10;
+/**
+ * Mocks the claimedCredentials function by returning returning the same 
+ * connectionString, recycleAt passed as parametrs with recycleAt defaults 
+ * to 5s from the date of calling it.
+ */
+const mockClaimedCredentials = (connectionString, recycleAt) => {
+  recycleAfter = recycleAt || taskcluster.fromNow('5 seconds');
 
   return async () => {
-    return {connectionString, recycleAfter};
+    return {connectionString, recycleAt};
   };
 };
 
-exports.mockclaimedCredentials = mockclaimedCredentials;
+exports.mockClaimedCredentials = mockClaimedCredentials;
