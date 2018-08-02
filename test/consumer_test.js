@@ -1,4 +1,4 @@
-const {FakeClient, Client, consume, connectionStringCredentials} = require('../src');
+const {FakeClient, client, consume, connectionStringCredentials} = require('../src');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
@@ -49,7 +49,7 @@ suite('consumer_test.js', function() {
 
     test('consume messages', async function() {
       const monitor = await libMonitor({projectName: 'tests', mock: true});
-      const client = new Client({
+      const ct = await client({
         credentials: connectionStringCredentials(PULSE_CONNECTION_STRING),
         retirementDelay: 50,
         minReconnectionInterval: 20,
@@ -61,7 +61,7 @@ suite('consumer_test.js', function() {
       await new Promise(async (resolve, reject) => {
         try {
           const pq = await consume({
-            client,
+            client: ct,
             queueName: unique,
             bindings: [{
               exchange: exchangeName,
@@ -80,7 +80,7 @@ suite('consumer_test.js', function() {
             // recycle the client after we've had a few messages, just for exercise.
             // Note that we continue to process this message here
             if (got.length == 4) {
-              client.recycle();
+              ct.recycle();
             }
             got.push(message);
             if (got.length === 9) {
@@ -97,7 +97,7 @@ suite('consumer_test.js', function() {
         }
       });
 
-      await client.stop();
+      await ct.stop();
 
       got.forEach(msg => {
         assume(msg.payload.data).to.deeply.equal('Hello');
@@ -120,7 +120,7 @@ suite('consumer_test.js', function() {
 
     test('no queueuName is an error', async function() {
       const monitor = await libMonitor({projectName: 'tests', mock: true});
-      const client = new Client({
+      const ct = await client({
         credentials: connectionStringCredentials(PULSE_CONNECTION_STRING),
         retirementDelay: 50,
         minReconnectionInterval: 20,
@@ -129,10 +129,10 @@ suite('consumer_test.js', function() {
       });
 
       try {
-        await consume({client, bindings: []}, () => {});
+        await consume({client: ct, bindings: []}, () => {});
       } catch (err) {
         assume(err).to.match(/Must pass a queueName/);
-        await client.stop();
+        await ct.stop();
         return;
       }
       assert(false, 'Did not get expected error');

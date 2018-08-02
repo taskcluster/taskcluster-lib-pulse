@@ -2,8 +2,8 @@ const events = require('events');
 const debug = require('debug');
 const amqplib = require('amqplib');
 const assert = require('assert');
-const {URL} = require('url');
-var clientCounter = 0;
+
+let clientCounter = 0;
 
 /**
  * An object to create connections to a pulse server.  This class will
@@ -31,8 +31,16 @@ var clientCounter = 0;
  * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
-  constructor({namespace, recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials}) {
+  constructor({namespace, recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials, options}) {
     super();
+
+    if (options) {
+      assert(!options.username, 'username is deprecated');
+      assert(!options.password, 'password is deprecated');
+      assert(!options.hostname, 'hostname is deprecated');
+      assert(!options.vhost, 'vhost is deprecated');
+      assert(!options.connectionString, 'connectionString is deprecated');
+    }
 
     assert(monitor, 'monitor is required');
     this.monitor = monitor;
@@ -48,10 +56,17 @@ class Client extends events.EventEmitter {
     this.lastConnectionTime = 0;
     this.id = ++clientCounter;
     this.debug = debug(`taskcluster-lib-pulse.client-${this.id}`);
-  
+  }
+
+  /**
+  * Calls recycle to create the intial connection and initialize the recycle interval.
+  * 
+  * In the public API, this is called automatically by `client`
+  */
+  async _start() {
     this.debug('starting');
     this.running = true;
-    this.recycle();
+    await this.recycle();
 
     this._interval = setInterval(
       () => this.recycle(),
@@ -62,12 +77,12 @@ class Client extends events.EventEmitter {
     assert(this.running, 'Not running');
     this.debug('stopping');
     this.running = false;
-  
-    clearTimeout(this._timeoutId);
+    clearTimeout(this._recycleTimer);
+    this._recycleTimer = null;
     clearInterval(this._interval);
     this._interval = null;
 
-    this.recycle();
+    await this.recycle();
 
     // wait until all existing connections are finished
     const unfinished = this.connections.filter(conn => conn.state !== 'finished');
@@ -80,7 +95,7 @@ class Client extends events.EventEmitter {
   /**
    * Create a new connection, retiring any existing connection.
    */
-  recycle() {
+  async recycle() {
     this.debug('recycling');
 
     if (this.connections.length) {
@@ -89,23 +104,43 @@ class Client extends events.EventEmitter {
     }
 
     if (this.running) {
-      const newConn = new Connection(this);
+      // If recycle is called due to recycleAt then refresh the normal recycle interval
+      if (this.recycleAt && this.recycleAt - new Date() === 0) {
+        clearInterval(this._interval);
+        this._interval = setInterval(
+          () => this.recycle(),
+          this._recycleInterval);
+      }
 
-      // don't actually start connecting until at lesat minReconnectionInterval has passed
-      const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
-      const now = new Date().getTime();
-      setTimeout(() => {
-        this.lastConnectionTime = new Date().getTime();
-        newConn.connect();
-      }, now < earliestConnectionTime ? earliestConnectionTime - now : 0);
+      try {
+        const {connectionString, recycleAt} = await this._fetchCredentials();
+        if (recycleAt) {
+          this.recycleAt = recycleAt;
+          this._setRecycleAt();
+        }
+        const newConn = new Connection(connectionString, this._retirementDelay);
 
-      newConn.once('connected', () => {
-        this.emit('connected', newConn);
-      });
-      newConn.once('finished', () => {
-        this.connections = this.connections.filter(conn => conn !== newConn);
-      });
-      this.connections.unshift(newConn);
+        // don't actually start connecting until at least minReconnectionInterval has passed
+        const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
+        const now = new Date().getTime();
+        setTimeout(() => {
+          this.lastConnectionTime = new Date().getTime();
+          newConn.connect();
+        }, now < earliestConnectionTime ? earliestConnectionTime - now : 0);
+
+        newConn.once('connected', () => {
+          this.emit('connected', newConn);
+        });
+        newConn.once('finished', () => {
+          this.connections = this.connections.filter(conn => conn !== newConn);
+        });
+        newConn.once('failed', () => {
+          this.recycle();
+        });
+        this.connections.unshift(newConn);
+      } catch (err) {
+        return err;
+      }
     }
   }
 
@@ -190,26 +225,29 @@ class Client extends events.EventEmitter {
     });
   }
 
-  callreclaim() {
-    setTimeout(reclaim = async () => {
-      await this.setConnectionString().catch(err => {});
-      this._timeoutId = setTimeout(reclaim, this._recycleAfter);
-    }, this._recycleAfter);
-  }
-
   /**
    * Using credentials return connectionstring  and set _recycleAfter of client.
    * recycleAfter is the recycle interval which may be suggested by the service from which 
    * credentials are claimed
    */
-  async setConnectionString() {
+  async _fetchCredentials() {
     const credentials = await this.credentials();
-    this._recycleAfter = credentials.recycleAfter;
-    this.connectionString = credentials.connectionString;
+    return credentials;
   }
 
+  _setRecycleAt() {
+    const recycleAfter = this.recycleAt - new Date();
+    this._recycleTimer = setTimeout(() => this.recycle(), recycleAfter);
+  }
 }
 
+const client = async (options) => {
+  const ct = new Client(options);
+  await ct._start();
+  return ct;
+};
+
+exports.client = client;
 exports.Client = Client;
 
 /**
@@ -262,13 +300,13 @@ let nextConnectionId = 1;
  *
  */
 class Connection extends events.EventEmitter {
-  constructor(client) {
+  constructor(connectionString, retirementDelay) {
     super();
-
-    this.client = client;
+  
+    this.connectionString = connectionString;
+    this.retirementDelay = retirementDelay;
     this.id = nextConnectionId++;
     this.amqp = null;
-
     this.debug = debug(`taskcluster-lib-pulse.conn-${this.id}`);
 
     this.debug('waiting');
@@ -283,20 +321,7 @@ class Connection extends events.EventEmitter {
     this.debug('connecting');
     this.state = 'connecting';
 
-    if (!this.client.connectionString) {
-      try {
-        await this.client.setConnectionString();
-        if (this.client._recycleAfter) {
-          this.client.callreclaim();
-        }
-      } catch (err) {
-        this.debug(`Error while connecting : ${err}`);
-        this.failed();
-        return;
-      }
-    }
-
-    const amqp = await amqplib.connect(this.client.connectionString, {
+    const amqp = await amqplib.connect(this.connectionString, {
       heartbeat: 120,
       noDelay: true,
       timeout: 30 * 1000,
@@ -340,7 +365,7 @@ class Connection extends events.EventEmitter {
       return;
     }
     this.debug('failed');
-    this.client.recycle();
+    this.emit('failed');
   }
 
   retire() {
@@ -362,9 +387,8 @@ class Connection extends events.EventEmitter {
       this.amqp = null;
       this.state = 'finished';
       this.emit('finished');
-    }, this.client._retirementDelay);
+    }, this.retirementDelay);
   }
-
 }
 
 exports.Connection = Connection;

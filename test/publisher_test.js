@@ -1,4 +1,4 @@
-const {FakeClient, Client, Exchanges, connectionStringCredentials} = require('../src');
+const {FakeClient, client, Exchanges, connectionStringCredentials} = require('../src');
 const path = require('path');
 const amqplib = require('amqplib');
 const assume = require('assume');
@@ -132,7 +132,7 @@ suite('publisher_test.js', function() {
   suite('PulsePublisher', function() {
     // use a unique name for each test run, just to ensure nothing interferes
     const unique = `test-${new Date().getTime()}`;
-    let client, conn, chan, exchanges, schemaset, publisher, messages;
+    let ct, conn, chan, exchanges, schemaset, publisher, messages;
 
     suiteSetup(async function() {
       if (!PULSE_CONNECTION_STRING) {
@@ -141,7 +141,7 @@ suite('publisher_test.js', function() {
       }
 
       const monitor = await libMonitor({projectName: exchangeOptions.projectName, mock: true});
-      client = new Client({
+      ct = await client({
         credentials: connectionStringCredentials(PULSE_CONNECTION_STRING),
         retirementDelay: 50,
         minReconnectionInterval: 20,
@@ -150,7 +150,7 @@ suite('publisher_test.js', function() {
       });
       // this won't be necessary when namespace is a proper argument to the
       // Client class..
-      client.namespace = exchangeOptions.projectName;
+      ct.namespace = exchangeOptions.projectName;
 
       exchanges = new Exchanges(exchangeOptions);
       exchanges.declare({...declaration, exchange: unique});
@@ -163,21 +163,21 @@ suite('publisher_test.js', function() {
       publisher = await exchanges.publisher({
         rootUrl: libUrls.testRootUrl(),
         schemaset,
-        client,
+        client: ct,
       });
 
       // otherwise, set up a queue to listen for messages, using amqplib
       // directly to avoid assuming the test subject works
       conn = await amqplib.connect(PULSE_CONNECTION_STRING);
       chan = await conn.createChannel();
-      const queueName = `queue/${client.namespace}/${unique}`;
+      const queueName = `queue/${ct.namespace}/${unique}`;
       await chan.assertQueue(queueName, 'topic', {
         exclusive: true,
         durable: false,
         autodelete: true,
       });
 
-      const exchangeName = `exchange/${client.namespace}/v2/${unique}`;
+      const exchangeName = `exchange/${ct.namespace}/v2/${unique}`;
       await chan.bindQueue(queueName, exchangeName, '#');
       await chan.consume(queueName, msg => {
         messages.push(msg);
@@ -206,7 +206,7 @@ suite('publisher_test.js', function() {
         assert.equal(messages.length, 1);
         const got = messages[0];
         assert.equal(got.fields.routingKey, 'yolks-on-you');
-        assert.equal(got.fields.exchange, `exchange/${client.namespace}/v2/${unique}`);
+        assert.equal(got.fields.exchange, `exchange/${ct.namespace}/v2/${unique}`);
         assert.deepEqual(JSON.parse(got.content), {eggId: 'yolks-on-you'});
       });
     });
@@ -227,9 +227,9 @@ suite('publisher_test.js', function() {
 
     test('publish messages in parallel (with failed connections)', async function() {
       await Promise.all(['a', 'b', 'c'].map(eggId => publisher.eggHatched({eggId})));
-      client.connections[0].amqp.close(); // force closure..
+      ct.connections[0].amqp.close(); // force closure..
       await Promise.all(['i', 'j', 'k', 'l', 'm'].map(eggId => publisher.eggHatched({eggId})));
-      client.connections[0].amqp.close(); // force closure..
+      ct.connections[0].amqp.close(); // force closure..
       await Promise.all(['x', 'y', 'z'].map(eggId => publisher.eggHatched({eggId})));
 
       await libTesting.poll(async () => {
@@ -243,7 +243,7 @@ suite('publisher_test.js', function() {
         return;
       }
 
-      await client.stop();
+      await ct.stop();
       await chan.close();
       await conn.close();
     });
