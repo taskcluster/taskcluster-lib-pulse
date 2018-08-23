@@ -66,10 +66,6 @@ const claimedCredentials = ({rootUrl, credentials, namespace, expires, contact})
   let connectionString, recycleAt;
 
   return async () => {
-    if (recycleAt && recycleAt - new Date() > 5) {
-      return {connectionString, recycleAt};
-    }
-
     const res = await pulse.claimNamespace(namespace, {
       expires,
       contact,

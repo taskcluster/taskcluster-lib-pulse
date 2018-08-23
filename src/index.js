@@ -1,4 +1,4 @@
-const {client, FakeClient} = require('./client');
+const {Client, FakeClient} = require('./client');
 const {consume} = require('./consumer');
 const {
   pulseCredentials,
@@ -9,7 +9,7 @@ const {
 const {Exchanges} = require('./publisher');
 
 module.exports = {
-  client,
+  Client,
   FakeClient,
   consume,
   pulseCredentials,

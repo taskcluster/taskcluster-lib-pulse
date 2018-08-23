@@ -31,23 +31,24 @@ let clientCounter = 0;
  * The pulse namespace for this user is available as `client.namespace`.
  */
 class Client extends events.EventEmitter {
-  constructor({namespace, recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials, options}) {
+  constructor({namespace, recycleInterval, retirementDelay, minReconnectionInterval, monitor, credentials,
+    username, password, hostname, vhost, connectionString}) {
     super();
 
-    if (options) {
-      assert(!options.username, 'username is deprecated');
-      assert(!options.password, 'password is deprecated');
-      assert(!options.hostname, 'hostname is deprecated');
-      assert(!options.vhost, 'vhost is deprecated');
-      assert(!options.connectionString, 'connectionString is deprecated');
-    }
+    assert(!username, 'username is deprecated');
+    assert(!password, 'password is deprecated');
+    assert(!hostname, 'hostname is deprecated');
+    assert(!vhost, 'vhost is deprecated');
+    assert(!connectionString, 'connectionString is deprecated');
+
+    assert(credentials, 'credentials is required');
+    this.credentials = credentials;
 
     assert(monitor, 'monitor is required');
     this.monitor = monitor;
 
     assert(namespace, 'namespace is required');
     this.namespace = namespace;
-    this.credentials = credentials;
     this._recycleInterval = recycleInterval || 3600 * 1000;
     this._retirementDelay = retirementDelay || 30 * 1000;
     this._minReconnectionInterval = minReconnectionInterval || 15 * 1000;
@@ -56,17 +57,10 @@ class Client extends events.EventEmitter {
     this.lastConnectionTime = 0;
     this.id = ++clientCounter;
     this.debug = debug(`taskcluster-lib-pulse.client-${this.id}`);
-  }
 
-  /**
-  * Calls recycle to create the intial connection and initialize the recycle interval.
-  * 
-  * In the public API, this is called automatically by `client`
-  */
-  async _start() {
     this.debug('starting');
     this.running = true;
-    await this.recycle();
+    this.recycle();
 
     this._interval = setInterval(
       () => this.recycle(),
@@ -82,7 +76,7 @@ class Client extends events.EventEmitter {
     clearInterval(this._interval);
     this._interval = null;
 
-    await this.recycle();
+    this.recycle();
 
     // wait until all existing connections are finished
     const unfinished = this.connections.filter(conn => conn.state !== 'finished');
@@ -95,7 +89,7 @@ class Client extends events.EventEmitter {
   /**
    * Create a new connection, retiring any existing connection.
    */
-  async recycle() {
+  recycle() {
     this.debug('recycling');
 
     if (this.connections.length) {
@@ -104,43 +98,32 @@ class Client extends events.EventEmitter {
     }
 
     if (this.running) {
-      // If recycle is called due to recycleAt then refresh the normal recycle interval
-      if (this.recycleAt && this.recycleAt - new Date() === 0) {
-        clearInterval(this._interval);
-        this._interval = setInterval(
-          () => this.recycle(),
-          this._recycleInterval);
-      }
+      const newConn = new Connection(this._retirementDelay);
 
-      try {
-        const {connectionString, recycleAt} = await this._fetchCredentials();
-        if (recycleAt) {
-          this.recycleAt = recycleAt;
-          this._setRecycleAt();
-        }
-        const newConn = new Connection(connectionString, this._retirementDelay);
-
-        // don't actually start connecting until at least minReconnectionInterval has passed
-        const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
-        const now = new Date().getTime();
-        setTimeout(() => {
+      // don't actually start connecting until at least minReconnectionInterval has passed
+      const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
+      const now = new Date().getTime();
+      setTimeout(async () => {
+        try {
           this.lastConnectionTime = new Date().getTime();
-          newConn.connect();
-        }, now < earliestConnectionTime ? earliestConnectionTime - now : 0);
-
-        newConn.once('connected', () => {
-          this.emit('connected', newConn);
-        });
-        newConn.once('finished', () => {
-          this.connections = this.connections.filter(conn => conn !== newConn);
-        });
-        newConn.once('failed', () => {
+          const connectionString = await this._fetchCredentials();
+          newConn.connect(connectionString);
+        } catch (err) {
+          this.debug(`Error while fetching credentials: ${err}`);
           this.recycle();
-        });
-        this.connections.unshift(newConn);
-      } catch (err) {
-        return err;
-      }
+        }
+      }, now < earliestConnectionTime ? earliestConnectionTime - now : 0);    
+
+      newConn.once('connected', () => {
+        this.emit('connected', newConn);
+      });
+      newConn.once('finished', () => {
+        this.connections = this.connections.filter(conn => conn !== newConn);
+      });
+      newConn.once('failed', () => {
+        this.recycle();
+      });
+      this.connections.unshift(newConn);
     }
   }
 
@@ -231,23 +214,26 @@ class Client extends events.EventEmitter {
    * credentials are claimed
    */
   async _fetchCredentials() {
-    const credentials = await this.credentials();
-    return credentials;
-  }
+    const {connectionString, recycleAt} = await this.credentials();
+    if (recycleAt) {
+      this._recycleAfter = recycleAt - new Date();
+      this._recycleTimer = setTimeout(() => this.recycle(), this._recycleAfter);
+      if (this._interval) {
+        clearInterval(this._interval);
+        this._interval = null;
+        this._recycleInterval = null;
+      }
+    }
+    
+    if (!recycleAt && !this._interval) {
+      // If recycleAt doesn't provide a value previous value is used
+      this._recycleTimer = setTimeout(() => this.recycle(), this._recycleAfter);
+    }
 
-  _setRecycleAt() {
-    const recycleAfter = this.recycleAt - new Date();
-    this._recycleTimer = setTimeout(() => this.recycle(), recycleAfter);
+    return connectionString;
   }
 }
 
-const client = async (options) => {
-  const ct = new Client(options);
-  await ct._start();
-  return ct;
-};
-
-exports.client = client;
 exports.Client = Client;
 
 /**
@@ -300,10 +286,9 @@ let nextConnectionId = 1;
  *
  */
 class Connection extends events.EventEmitter {
-  constructor(connectionString, retirementDelay) {
+  constructor(retirementDelay) {
     super();
   
-    this.connectionString = connectionString;
     this.retirementDelay = retirementDelay;
     this.id = nextConnectionId++;
     this.amqp = null;
@@ -313,7 +298,7 @@ class Connection extends events.EventEmitter {
     this.state = 'waiting';
   }
 
-  async connect() {
+  async connect(connectionString) {
     if (this.state !== 'waiting') {
       return;
     }
@@ -321,7 +306,7 @@ class Connection extends events.EventEmitter {
     this.debug('connecting');
     this.state = 'connecting';
 
-    const amqp = await amqplib.connect(this.connectionString, {
+    const amqp = await amqplib.connect(connectionString, {
       heartbeat: 120,
       noDelay: true,
       timeout: 30 * 1000,

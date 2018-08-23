@@ -1,5 +1,4 @@
-const {client, connectionStringCredentials} = require('../src');
-const {Client} = require('../src/client');
+const {Client, connectionStringCredentials} = require('../src');
 const amqplib = require('amqplib');
 const assume = require('assume');
 const debugModule = require('debug');
@@ -46,43 +45,43 @@ const connectionTests = connectionString => {
     debug('publish complete');
   };
 
-  const credentials = connectionStringCredentials(PULSE_CONNECTION_STRING);
+  const credentials = connectionStringCredentials(connectionString);
 
   test('start and immediately stop', async function() {
     let gotConnection = false;
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
       namespace: 'guest',
     });
-    ct.on('connected', () => { gotConnection = true; });
-    await ct.stop();
+    client.on('connected', () => { gotConnection = true; });
+    await client.stop();
     assume(gotConnection).to.equal(false);
   });
 
   test('activeConnection', async function() {
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
       namespace: 'guest',
     });
-    assume(ct.activeConnection).to.equal(undefined);
+    assume(client.activeConnection).to.equal(undefined);
     await new Promise((resolve, reject) => {
-      ct.on('connected', conn => {
+      client.on('connected', conn => {
         try {
-          assume(ct.activeConnection).to.equal(conn);
+          assume(client.activeConnection).to.equal(conn);
         } catch (err) {
           return reject(err);
         }
         resolve();
       });
     });
-    await ct.stop();
-    assume(ct.activeConnection).to.equal(undefined);
+    await client.stop();
+    assume(client.activeConnection).to.equal(undefined);
   });
 
   test('recycle interval', async function() {
@@ -90,7 +89,7 @@ const connectionTests = connectionString => {
     const oldMethod = Client.prototype.recycle;
     Client.prototype.recycle = () => { recycles++; };
     try {
-      const ct = await client({
+      const client = new Client({
         credentials,
         recycleInterval: 10,
         retirementDelay: 50,
@@ -98,7 +97,7 @@ const connectionTests = connectionString => {
         namespace: 'guest',
       });
       await new Promise(resolve => setTimeout(resolve, 100));
-      await ct.stop();
+      await client.stop();
       assume(recycles).is.gt(5);
     } finally {
       Client.prototype.recycle = oldMethod;
@@ -113,10 +112,10 @@ const connectionTests = connectionString => {
       throw new Error('uhoh');
     };
 
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
-      minReconnectionInterval: 10,
+      minReconnectionInterval: 20,
       monitor,
       namespace: 'guest',
     });
@@ -126,7 +125,7 @@ const connectionTests = connectionString => {
       // connections; if the minReconnectionInterval doesn't work, we'll get a lot
       // more than that!
       await new Promise(resolve => setTimeout(resolve, 100));
-      await ct.stop();
+      await client.stop();
     } finally {
       amqplib.connect = oldConnect;
     }
@@ -134,7 +133,7 @@ const connectionTests = connectionString => {
   });
 
   test('start and stop after connection is established', async function() {
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
@@ -143,14 +142,14 @@ const connectionTests = connectionString => {
     });
 
     await new Promise((resolve, reject) => {
-      ct.onConnected(() => {
-        ct.stop().then(resolve, reject);
+      client.onConnected(() => {
+        client.stop().then(resolve, reject);
       });
     });
   });
 
   test('start, fail, and then stop', async function() {
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
@@ -159,17 +158,17 @@ const connectionTests = connectionString => {
     });
 
     await new Promise((resolve, reject) => {
-      ct.once('connected', connection => {
+      client.once('connected', connection => {
         connection.failed();
-        ct.once('connected', () => {
-          ct.stop().then(resolve, reject);
+        client.once('connected', () => {
+          client.stop().then(resolve, reject);
         });
       });
     });
   });
 
   test('withConnection', async function() {
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
@@ -179,13 +178,13 @@ const connectionTests = connectionString => {
 
     let gotConnection = false;
     let finishedWithConnection = false;
-    ct.withConnection(conn => { gotConnection = true; })
+    client.withConnection(conn => { gotConnection = true; })
       .then(() => { finishedWithConnection = true; });
 
     assume(finishedWithConnection).to.equal(false);
     await new Promise((resolve, reject) => {
-      ct.once('connected', () => {
-        ct.stop().then(resolve, reject);
+      client.once('connected', () => {
+        client.stop().then(resolve, reject);
       });
     });
 
@@ -195,7 +194,7 @@ const connectionTests = connectionString => {
   });
 
   test('withChannel', async function() {
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
@@ -203,12 +202,12 @@ const connectionTests = connectionString => {
       namespace: 'guest',
     });
 
-    const queueName = ct.fullObjectName('queue', slugid.v4());
+    const queueName = client.fullObjectName('queue', slugid.v4());
 
     let gotException;
     try {
       
-      await ct.withChannel(async chan => {
+      await client.withChannel(async chan => {
         await chan.assertQueue(queueName);
         // throw an error to exercise error-handling code
         throw new Error('uhoh');
@@ -224,31 +223,31 @@ const connectionTests = connectionString => {
     assume(gotException).to.equal(true);
 
     let queueInfo;
-    await ct.withChannel(async chan => {
+    await client.withChannel(async chan => {
       queueInfo = await chan.checkQueue(queueName);
       await chan.deleteQueue(queueName);
     });
 
-    await ct.stop();
+    await client.stop();
     assume(queueInfo.queue).to.equal(queueName);
   });
 
   test('consumer (with failures)', async function() {
-    const ct = await client({
+    const client = new Client({
       credentials,
       retirementDelay: 50,
       minReconnectionInterval: 20,
       monitor,
       namespace: 'guest',
     });
-    
+
     let failureCount = 0;
     let messageReceived = 0;
 
     try {
       
       await new Promise((resolve, reject) => {
-        ct.on('connected', async (conn) => {
+        client.on('connected', async (conn) => {
           let chan, consumer;
 
           // do the per-connection setup we expect a user to do
@@ -292,7 +291,7 @@ const connectionTests = connectionString => {
 
       assume(messageReceived).to.equal(1);
     } finally {
-      await ct.stop();
+      await client.stop();
     }
   });
 };
