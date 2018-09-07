@@ -35,7 +35,7 @@ credentials = pulse.claimedCredentials({
   rootUrl: cfg.taskcluster.rootUrl,
   credentials: cfg.taskcluster.credentials, // {clientId, accessToken}
   namespace: 'my-service',
-  expires: ..,
+  expiresAfter: '4 hours',    // expiration time difference
   contact: cfg.pulse.contact, // email address for queue alerts
 });
 
@@ -51,6 +51,11 @@ credentials = pulse.pulseCredentials({
 credentials = pulse.connectionStringCredentials(
   'amqps://me:sekrit@foo.com/%2Fvhost');
 ```
+
+For the first option, it's recommended to use a short `expiresAfter` for
+temporary work such as testing, and a long expiration for production services
+that do not want to lose messages if there is service downtime. See the
+Taskcluster-pulse documentation for details.
 
 Next, create a `Client` to handle (re)connecting to Pulse:
 
