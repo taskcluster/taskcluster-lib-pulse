@@ -58,7 +58,7 @@ const claimedCredentials = ({rootUrl, credentials, namespace, expiresAfter, cont
   assert(credentials, 'credentials is required');
   assert(namespace, 'namespace is required');
 
-  const pulse = taskcluster.Pulse({
+  const pulse = new taskcluster.Pulse({
     credentials,
     rootUrl,
   });
