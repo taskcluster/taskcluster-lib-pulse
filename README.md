@@ -24,22 +24,41 @@ interacting with a Client are not important -- just construct one and move on.
 
 # Client
 
-Create a `Client` to handle (re)connecting to Pulse:
+Create a credentials function, choosing among:
 
 ```javascript
 const pulse = require('taskcluster-lib-pulse');
 
-const client = new pulse.Client({
-  connectionString: 'amqps://...',
-  monitor: .., // taskcluster-lib-monitor instance
+let credentials;
+// Taskcluster credentials, to claim from taskcluster-pulse
+credentials = pulse.claimedCredentials({
+  rootUrl: cfg.taskcluster.rootUrl,
+  credentials: cfg.taskcluster.credentials, // {clientId, accessToken}
+  namespace: 'my-service',
+  expires: ..,
+  contact: cfg.pulse.contact, // email address for queue alerts
 });
-// or
-const client = new pulse.Client({
+
+// raw AMQP credentials
+credentials = pulse.pulseCredentials({
   username: 'sendr',
   password: 'sekrit',
   hostname: 'pulse.mycompany.com',
   vhost: '/',
-  monitor: ..,
+});
+
+// ..or a connection string
+credentials = pulse.connectionStringCredentials(
+  'amqps://me:sekrit@foo.com/%2Fvhost');
+```
+
+Next, create a `Client` to handle (re)connecting to Pulse:
+
+```javascript
+const client = new pulse.Client({
+  namespace: 'my-service',
+  credentials, // from above
+  monitor: .., // taskcluster-lib-monitor instance
 });
 ```
 
