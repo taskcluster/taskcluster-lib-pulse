@@ -104,13 +104,20 @@ class Client extends events.EventEmitter {
       const earliestConnectionTime = this.lastConnectionTime + this._minReconnectionInterval;
       const now = new Date().getTime();
       setTimeout(async () => {
+        if (newConn.state !== 'waiting') {
+          // the connection is no longer waiting, so don't proceed with
+          // connecting (this is rare, but can occur if the recycle timer
+          // occurs at just the wrong moment)
+          return;
+        }
+
         try {
           this.lastConnectionTime = new Date().getTime();
           const connectionString = await this._fetchCredentials();
           newConn.connect(connectionString);
         } catch (err) {
           this.debug(`Error while fetching credentials: ${err}`);
-          this.recycle();
+          newConn.failed();
         }
       }, now < earliestConnectionTime ? earliestConnectionTime - now : 0);    
 

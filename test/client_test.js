@@ -115,7 +115,7 @@ const connectionTests = connectionString => {
     const client = new Client({
       credentials,
       retirementDelay: 50,
-      minReconnectionInterval: 20,
+      minReconnectionInterval: 10,
       monitor,
       namespace: 'guest',
     });
