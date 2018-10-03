@@ -39,7 +39,7 @@ class Exchanges {
 
   async publisher({rootUrl, schemaset, client, sendDeadline, publish, aws}) {
     let publisher;
-    if (process.env.NODE_ENV ==='development') {
+    if (process.env.NODE_ENV !== 'development') {
       this.exchangePrefix = `exchange/${client.namespace}/${this.version}/`;
     }
 
@@ -168,7 +168,7 @@ class PulsePublisher {
     this.exchanges = exchanges;
     this.sendDeadline = sendDeadline || 12000;
 
-    if (process.env.NODE_ENV ==='production') {
+    if (process.env.NODE_ENV === 'production') {
       assert.equal(client.namespace, exchanges.projectName,
         'client namespace must match projectName');
     }
