@@ -99,7 +99,7 @@ class Entry {
         name: key.name,
         summary: key.summary,
         constant: key.constant,
-        multipleWords: key.multipleWords,
+        multipleWords: Boolean(key.multipleWords),
         required: key.required,
       })),
     };

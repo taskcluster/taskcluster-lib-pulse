@@ -162,7 +162,7 @@ suite('publisher_test.js', function() {
           name: 'eggHatched',
           routingKey: [{
             constant: 'primary',
-            multipleWords: undefined,
+            multipleWords: false,
             name: 'eggId',
             required: true,
             summary: 'Identifier that we use for testing',
