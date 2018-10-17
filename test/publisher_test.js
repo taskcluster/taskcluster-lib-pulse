@@ -46,7 +46,7 @@ suite('publisher_test.js', function() {
     routingKey: [{
       name:           'eggId',
       summary:        'Identifier that we use for testing',
-      constant: 'primary',
+      constant:       'primary',
       required:       true,
       maxSize:        22,
     }],
