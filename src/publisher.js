@@ -98,7 +98,7 @@ class Entry {
       routingKey: this.routingKey.map(key => ({
         name: key.name,
         summary: key.summary,
-        constant: !!key.constant,
+        constant: key.constant,
         multipleWords: key.multipleWords,
         required: key.required,
       })),
